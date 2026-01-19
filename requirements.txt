@@ -2,5 +2,3 @@ fastapi
 uvicorn
 pandas
 sqlalchemy
-openai
-python-dotenv

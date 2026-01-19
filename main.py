@@ -1,115 +1,89 @@
 import os
-from fastapi import FastAPI, UploadFile, Depends, Header, HTTPException
+import sqlite3
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-import pandas as pd
-from sqlalchemy import create_engine, text
-from dotenv import load_dotenv
+from typing import Optional
 
-# -------------------
-# Environment setup
-# -------------------
-load_dotenv()
-ADMIN_API_KEY = os.getenv("SAP_ADMIN_KEY")
+DB_PATH = "sap_tcodes.db"
 
-# -------------------
-# FastAPI app
-# -------------------
-app = FastAPI(title="SAP T-code Backend", version="1.0")
-engine = create_engine("sqlite:///sap_tcodes.db")
+app = FastAPI(
+    title="SAP T-Code Lookup API",
+    description="Fast SAP T-code search using SQLite FTS5",
+    version="1.0.0",
+)
 
-# -------------------
-# Security dependency
-# -------------------
-def verify_api_key(x_api_key: str = Header(None)):
-    if x_api_key != ADMIN_API_KEY:
-        raise HTTPException(status_code=401, detail="Unauthorized")
+# ---------- Models ----------
 
-# -------------------
-# Request models
-# -------------------
 class SearchRequest(BaseModel):
     query: str
+    module: Optional[str] = None
 
-# -------------------
-# Public endpoint (used by VAPI)
-# -------------------
+
+# ---------- Helpers ----------
+
+def get_db_connection():
+    if not os.path.exists(DB_PATH):
+        raise HTTPException(status_code=500, detail="Database not found")
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+# ---------- Health ----------
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+# ---------- Search ----------
+
 @app.post("/search-tcode")
-def search_tcode(req: SearchRequest, module: str | None = None):
-    with engine.connect() as conn:
-        sql = """
-        SELECT tcode, description, module
-        FROM sap_tcodes
-        WHERE description LIKE :q
-        """
-        params = {"q": f"%{req.query}%"}
+def search_tcode(req: SearchRequest):
+    query = req.query.strip()
 
-        if module:
-            sql += " AND module = :m"
-            params["m"] = module.upper()
+    if not query:
+        raise HTTPException(status_code=400, detail="Query cannot be empty")
 
-        sql += " ORDER BY description LIMIT 5"
+    conn = get_db_connection()
+    cur = conn.cursor()
 
-        rows = conn.execute(text(sql), params).fetchall()
+    try:
+        if req.module:
+            sql = """
+                SELECT tcode, description, module
+                FROM sap_tcodes_fts
+                WHERE sap_tcodes_fts MATCH ?
+                  AND module = ?
+                LIMIT 5
+            """
+            cur.execute(sql, (query, req.module.upper()))
+        else:
+            sql = """
+                SELECT tcode, description, module
+                FROM sap_tcodes_fts
+                WHERE sap_tcodes_fts MATCH ?
+                LIMIT 5
+            """
+            cur.execute(sql, (query,))
+
+        rows = cur.fetchall()
+
+    finally:
+        conn.close()
 
     if not rows:
-        return {"found": False}
-
-    modules = {r[2] for r in rows if r[2]}
-    ambiguous = len(modules) > 1
+        return {
+            "found": False,
+            "message": "No matching SAP T-code found",
+        }
 
     return {
         "found": True,
         "results": [
-            {"tcode": r[0], "description": r[1], "module": r[2]}
-            for r in rows
-        ],
-        "ambiguous_modules": ambiguous
-    }
-
-# -------------------
-# Admin: CSV upload (API key protected)
-# -------------------
-@app.post("/admin/upload-csv")
-def upload_csv(file: UploadFile, _: None = Depends(verify_api_key)):
-    df = pd.read_csv(file.file)
-
-    required_cols = {"tcode", "description"}
-    if not required_cols.issubset(df.columns):
-        raise HTTPException(
-            status_code=400,
-            detail="CSV must contain at least tcode and description columns"
-        )
-
-    if "module" not in df.columns:
-        df["module"] = None
-
-    df["tcode"] = df["tcode"].str.upper()
-    df["module"] = df["module"].str.upper()
-
-    raw_conn = engine.raw_connection()
-    try:
-        df.to_sql(
-            "sap_tcodes",
-            raw_conn,
-            if_exists="append",
-            index=False
-        )
-    finally:
-        raw_conn.close()
-
-    return {
-        "status": "success",
-        "rows_added": len(df)
-    }
-
-# -------------------
-# OpenAI / suggest-module endpoint intentionally DISABLED
-# -------------------
-
-# -------------------
-# Run app (Render-compatible)
-# -------------------
-if __name__ == "__main__":
-    import uvicorn
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port)
+            {
+                "tcode": row["tcode"],
+                "description": row["description"],
+                "module": row["module"],
+            }
+            for row in
