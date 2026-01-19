@@ -1,0 +1,10 @@
+# Python virtual environments
+venv/
+__pycache__/
+*.pyc
+
+# SQLite DB (optional: include if you want DB uploaded)
+sap_tcodes.db
+
+# Environment files
+.env
