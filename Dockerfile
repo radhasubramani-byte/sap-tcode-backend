@@ -1,5 +1,10 @@
 FROM python:3.10-slim
 
+# Install SQLite with FTS5 support
+RUN apt-get update && \
+    apt-get install -y sqlite3 libsqlite3-dev && \
+    rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 COPY requirements.txt .
