@@ -86,4 +86,6 @@ def search_tcode(req: SearchRequest):
                 "description": row["description"],
                 "module": row["module"],
             }
-            for row in
+            for row in rows
+        ],
+    }

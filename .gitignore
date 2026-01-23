@@ -1,10 +1,29 @@
-# Python virtual environments
-venv/
+# Python cache
 __pycache__/
 *.pyc
 
-# SQLite DB (optional: include if you want DB uploaded)
-sap_tcodes.db
+# Virtual environments
+venv/
+env/
 
-# Environment files
+# Environment secrets
 .env
+
+# Archives
+*.zip
+
+# Excel / CSV / temp data
+*.xlsx
+*.csv
+
+# Helper / one-off scripts
+create_db.py
+load_data.py
+read_csv.py
+write_to_db.py
+enable_fts.py
+load_and_enable_fts.py
+
+# Random helper text files only
+git remote add origin httpsgithub.c.txt
+httpsgithub.comradhasubramani-bytes.txt
