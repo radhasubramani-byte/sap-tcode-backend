@@ -2,38 +2,56 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from pydantic import BaseModel
 import sqlite3
 import csv
-import io
-import os
-from typing import Optional, List
-
-# -------------------------
-# App Init
-# -------------------------
-
-app = FastAPI(
-    title="SAP T-Code Lookup API",
-    version="1.0.0",
-    description="Fast SAP T-code search with FTS5 + alias intelligence"
-)
+from io import TextIOWrapper
+from typing import Optional
 
 DB_PATH = "sap_tcodes.db"
 
+app = FastAPI(
+    title="SAP T-Code Lookup API",
+    version="1.0.0"
+)
+
 # -------------------------
-# Database Helpers
+# Database helpers
 # -------------------------
 
 def get_db():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
 
-# -------------------------
-# Models
-# -------------------------
+def init_db():
+    conn = get_db()
+    cur = conn.cursor()
 
-class SearchRequest(BaseModel):
-    query: str
-    module: Optional[str] = None
+    # Main tcode table
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS tcodes (
+            tcode TEXT PRIMARY KEY,
+            description TEXT,
+            module TEXT
+        )
+    """)
+
+    # FTS table
+    cur.execute("""
+        CREATE VIRTUAL TABLE IF NOT EXISTS tcodes_fts
+        USING fts5(tcode, description, module)
+    """)
+
+    # Alias table (UPDATED SCHEMA)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS aliases (
+            alias TEXT PRIMARY KEY,
+            tcode TEXT NOT NULL,
+            canonical_desc TEXT
+        )
+    """)
+
+    conn.commit()
+
+init_db()
 
 # -------------------------
 # Health
@@ -44,73 +62,73 @@ def health():
     return {"status": "ok"}
 
 # -------------------------
-# Alias Normalization
+# Search API
 # -------------------------
 
-def normalize_query(text: str) -> str:
-    conn = get_db()
-    cur = conn.cursor()
-
-    words = text.lower().split()
-    expanded = []
-
-    for w in words:
-        cur.execute(
-            "SELECT canonical FROM aliases WHERE alias = ?",
-            (w,)
-        )
-        row = cur.fetchone()
-        expanded.append(row["canonical"] if row else w)
-
-    return " ".join(expanded)
-
-# -------------------------
-# Search Endpoint
-# -------------------------
+class SearchRequest(BaseModel):
+    query: str
+    module: Optional[str] = None
 
 @app.post("/search-tcode")
 def search_tcode(req: SearchRequest):
     conn = get_db()
     cur = conn.cursor()
 
-    normalized = normalize_query(req.query)
+    q = req.query.strip().lower()
 
-    sql = """
-    SELECT tcode, description, module,
-           bm25(sap_tcodes_fts) AS score
-    FROM sap_tcodes_fts
-    WHERE sap_tcodes_fts MATCH ?
-    """
-    params = [normalized]
+    # 1️⃣ Alias lookup first
+    cur.execute("""
+        SELECT tcode, canonical_desc
+        FROM aliases
+        WHERE alias = ?
+    """, (q,))
+    alias_hit = cur.fetchone()
 
-    if req.module:
-        sql += " AND module = ?"
-        params.append(req.module)
-
-    sql += " ORDER BY score LIMIT 5"
-
-    cur.execute(sql, params)
-    rows = cur.fetchall()
-
-    if rows:
+    if alias_hit:
         return {
-            "normalized_query": normalized,
-            "results": [dict(r) for r in rows],
-            "confidence": "high" if rows[0]["score"] < -5 else "medium"
+            "confidence": 0.95,
+            "source": "alias",
+            "results": [{
+                "tcode": alias_hit["tcode"],
+                "description": alias_hit["canonical_desc"]
+            }]
         }
 
-    # Alias suggestion fallback
-    cur.execute(
-        "SELECT DISTINCT canonical FROM aliases WHERE canonical LIKE ? LIMIT 3",
-        (f"%{normalized}%",)
-    )
-    suggestions = [r["canonical"] for r in cur.fetchall()]
+    # 2️⃣ FTS fallback
+    if req.module:
+        cur.execute("""
+            SELECT tcode, description, module
+            FROM tcodes_fts
+            WHERE tcodes_fts MATCH ?
+              AND module = ?
+            LIMIT 5
+        """, (q, req.module))
+    else:
+        cur.execute("""
+            SELECT tcode, description, module
+            FROM tcodes_fts
+            WHERE tcodes_fts MATCH ?
+            LIMIT 5
+        """, (q,))
+
+    rows = cur.fetchall()
+
+    if not rows:
+        return {
+            "confidence": 0.0,
+            "message": "No matching SAP T-code found"
+        }
 
     return {
-        "normalized_query": normalized,
-        "results": [],
-        "suggestions": suggestions,
-        "confidence": "low"
+        "confidence": 0.75,
+        "source": "fts",
+        "results": [
+            {
+                "tcode": r["tcode"],
+                "description": r["description"],
+                "module": r["module"]
+            } for r in rows
+        ]
     }
 
 # -------------------------
@@ -120,29 +138,34 @@ def search_tcode(req: SearchRequest):
 @app.post("/admin/upload-aliases", tags=["Admin"])
 def upload_aliases(file: UploadFile = File(...)):
     if not file.filename.endswith(".csv"):
-        raise HTTPException(status_code=400, detail="CSV required")
+        raise HTTPException(status_code=400, detail="CSV file required")
 
     conn = get_db()
     cur = conn.cursor()
 
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS aliases (
-            alias TEXT PRIMARY KEY,
-            canonical TEXT
+    reader = csv.DictReader(TextIOWrapper(file.file, encoding="utf-8"))
+
+    required_cols = {"alias", "tcode", "canonical_desc"}
+    if not required_cols.issubset(reader.fieldnames):
+        raise HTTPException(
+            status_code=400,
+            detail=f"CSV must contain columns: {required_cols}"
         )
-    """)
 
-    content = file.file.read().decode("utf-8")
-    reader = csv.DictReader(io.StringIO(content))
-
+    count = 0
     for row in reader:
-        cur.execute(
-            "INSERT OR REPLACE INTO aliases (alias, canonical) VALUES (?, ?)",
-            (row["alias"].lower(), row["canonical"].lower())
-        )
+        cur.execute("""
+            INSERT OR REPLACE INTO aliases (alias, tcode, canonical_desc)
+            VALUES (?, ?, ?)
+        """, (
+            row["alias"].strip().lower(),
+            row["tcode"].strip().upper(),
+            row["canonical_desc"].strip()
+        ))
+        count += 1
 
     conn.commit()
-    return {"status": "aliases uploaded"}
+    return {"status": "success", "aliases_loaded": count}
 
 # -------------------------
 # Admin: Upload T-code CSV
@@ -151,31 +174,21 @@ def upload_aliases(file: UploadFile = File(...)):
 @app.post("/admin/upload-tcodes", tags=["Admin"])
 def upload_tcodes(file: UploadFile = File(...)):
     if not file.filename.endswith(".csv"):
-        raise HTTPException(status_code=400, detail="CSV required")
+        raise HTTPException(status_code=400, detail="CSV file required")
 
     conn = get_db()
     cur = conn.cursor()
 
-    content = file.file.read().decode("utf-8")
-    reader = csv.DictReader(io.StringIO(content))
+    reader = csv.DictReader(TextIOWrapper(file.file, encoding="utf-8"))
 
-    cur.execute("DELETE FROM sap_tcodes")
-
-    for row in reader:
-        cur.execute(
-            """
-            INSERT INTO sap_tcodes (tcode, description, module)
-            VALUES (?, ?, ?)
-            """,
-            (row["tcode"], row["description"], row["module"])
+    required_cols = {"tcode", "description", "module"}
+    if not required_cols.issubset(reader.fieldnames):
+        raise HTTPException(
+            status_code=400,
+            detail=f"CSV must contain columns: {required_cols}"
         )
 
-    # Rebuild FTS
-    cur.execute("DELETE FROM sap_tcodes_fts")
-    cur.execute("""
-        INSERT INTO sap_tcodes_fts (tcode, description, module)
-        SELECT tcode, description, module FROM sap_tcodes
-    """)
-
-    conn.commit()
-    return {"status": "tcodes uploaded & FTS synced"}
+    count = 0
+    for row in reader:
+        tcode = row["tcode"].strip().upper()
+        desc = row["description"].strip()
