@@ -2,8 +2,8 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from pydantic import BaseModel
 import sqlite3
 import csv
-from io import TextIOWrapper
-from typing import Optional
+import io
+import os
 
 DB_PATH = "sap_tcodes.db"
 
@@ -13,19 +13,18 @@ app = FastAPI(
 )
 
 # -------------------------
-# Database helpers
+# Database Helpers
 # -------------------------
 
 def get_db():
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    return conn
+    return sqlite3.connect(DB_PATH, check_same_thread=False)
+
 
 def init_db():
     conn = get_db()
     cur = conn.cursor()
 
-    # Main tcode table
+    # T-code table
     cur.execute("""
         CREATE TABLE IF NOT EXISTS tcodes (
             tcode TEXT PRIMARY KEY,
@@ -40,9 +39,12 @@ def init_db():
         USING fts5(tcode, description, module)
     """)
 
-    # Alias table (UPDATED SCHEMA)
+    # 🔥 RESET aliases table to avoid schema mismatch
+    cur.execute("DROP TABLE IF EXISTS aliases")
+
+    # Alias table (NEW SCHEMA)
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS aliases (
+        CREATE TABLE aliases (
             alias TEXT PRIMARY KEY,
             tcode TEXT NOT NULL,
             canonical_desc TEXT
@@ -51,7 +53,17 @@ def init_db():
 
     conn.commit()
 
+
 init_db()
+
+# -------------------------
+# Models
+# -------------------------
+
+class SearchRequest(BaseModel):
+    query: str
+    module: str | None = None
+
 
 # -------------------------
 # Health
@@ -61,27 +73,23 @@ init_db()
 def health():
     return {"status": "ok"}
 
-# -------------------------
-# Search API
-# -------------------------
 
-class SearchRequest(BaseModel):
-    query: str
-    module: Optional[str] = None
+# -------------------------
+# Search Logic
+# -------------------------
 
 @app.post("/search-tcode")
 def search_tcode(req: SearchRequest):
+    query = req.query.lower().strip()
     conn = get_db()
     cur = conn.cursor()
 
-    q = req.query.strip().lower()
-
-    # 1️⃣ Alias lookup first
+    # 1️⃣ Alias lookup FIRST
     cur.execute("""
         SELECT tcode, canonical_desc
         FROM aliases
         WHERE alias = ?
-    """, (q,))
+    """, (query,))
     alias_hit = cur.fetchone()
 
     if alias_hit:
@@ -89,8 +97,8 @@ def search_tcode(req: SearchRequest):
             "confidence": 0.95,
             "source": "alias",
             "results": [{
-                "tcode": alias_hit["tcode"],
-                "description": alias_hit["canonical_desc"]
+                "tcode": alias_hit[0],
+                "description": alias_hit[1]
             }]
         }
 
@@ -102,34 +110,53 @@ def search_tcode(req: SearchRequest):
             WHERE tcodes_fts MATCH ?
               AND module = ?
             LIMIT 5
-        """, (q, req.module))
+        """, (query, req.module))
     else:
         cur.execute("""
             SELECT tcode, description, module
             FROM tcodes_fts
             WHERE tcodes_fts MATCH ?
             LIMIT 5
-        """, (q,))
+        """, (query,))
 
     rows = cur.fetchall()
 
     if not rows:
-        return {
-            "confidence": 0.0,
-            "message": "No matching SAP T-code found"
-        }
+        # 🔁 Alias suggestion fallback
+        cur.execute("""
+            SELECT alias, tcode, canonical_desc
+            FROM aliases
+            WHERE alias LIKE ?
+            LIMIT 3
+        """, (f"%{query}%",))
+        suggestions = cur.fetchall()
+
+        if suggestions:
+            return {
+                "confidence": 0.6,
+                "suggestions": [
+                    {
+                        "alias": s[0],
+                        "tcode": s[1],
+                        "description": s[2]
+                    } for s in suggestions
+                ]
+            }
+
+        return {"confidence": 0.0, "results": []}
 
     return {
-        "confidence": 0.75,
+        "confidence": 0.85,
         "source": "fts",
         "results": [
             {
-                "tcode": r["tcode"],
-                "description": r["description"],
-                "module": r["module"]
+                "tcode": r[0],
+                "description": r[1],
+                "module": r[2]
             } for r in rows
         ]
     }
+
 
 # -------------------------
 # Admin: Upload Alias CSV
@@ -140,19 +167,20 @@ def upload_aliases(file: UploadFile = File(...)):
     if not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="CSV file required")
 
-    conn = get_db()
-    cur = conn.cursor()
-
-    reader = csv.DictReader(TextIOWrapper(file.file, encoding="utf-8"))
+    content = file.file.read().decode("utf-8")
+    reader = csv.DictReader(io.StringIO(content))
 
     required_cols = {"alias", "tcode", "canonical_desc"}
     if not required_cols.issubset(reader.fieldnames):
         raise HTTPException(
             status_code=400,
-            detail=f"CSV must contain columns: {required_cols}"
+            detail="CSV must contain: alias,tcode,canonical_desc"
         )
 
+    conn = get_db()
+    cur = conn.cursor()
     count = 0
+
     for row in reader:
         cur.execute("""
             INSERT OR REPLACE INTO aliases (alias, tcode, canonical_desc)
@@ -165,7 +193,12 @@ def upload_aliases(file: UploadFile = File(...)):
         count += 1
 
     conn.commit()
-    return {"status": "success", "aliases_loaded": count}
+
+    return {
+        "status": "success",
+        "aliases_loaded": count
+    }
+
 
 # -------------------------
 # Admin: Upload T-code CSV
@@ -176,19 +209,44 @@ def upload_tcodes(file: UploadFile = File(...)):
     if not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="CSV file required")
 
-    conn = get_db()
-    cur = conn.cursor()
-
-    reader = csv.DictReader(TextIOWrapper(file.file, encoding="utf-8"))
+    content = file.file.read().decode("utf-8")
+    reader = csv.DictReader(io.StringIO(content))
 
     required_cols = {"tcode", "description", "module"}
     if not required_cols.issubset(reader.fieldnames):
         raise HTTPException(
             status_code=400,
-            detail=f"CSV must contain columns: {required_cols}"
+            detail="CSV must contain: tcode,description,module"
         )
 
+    conn = get_db()
+    cur = conn.cursor()
     count = 0
+
     for row in reader:
-        tcode = row["tcode"].strip().upper()
-        desc = row["description"].strip()
+        cur.execute("""
+            INSERT OR REPLACE INTO tcodes (tcode, description, module)
+            VALUES (?, ?, ?)
+        """, (
+            row["tcode"].strip().upper(),
+            row["description"].strip(),
+            row["module"].strip().upper()
+        ))
+
+        cur.execute("""
+            INSERT INTO tcodes_fts (tcode, description, module)
+            VALUES (?, ?, ?)
+        """, (
+            row["tcode"].strip().upper(),
+            row["description"].strip(),
+            row["module"].strip().upper()
+        ))
+
+        count += 1
+
+    conn.commit()
+
+    return {
+        "status": "success",
+        "tcodes_loaded": count
+    }
