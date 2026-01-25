@@ -1,4 +1,5 @@
 fastapi
 uvicorn
 pandas
-sqlalchemy
+sqlite-utils
+python-multipart
