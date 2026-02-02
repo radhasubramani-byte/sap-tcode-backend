@@ -1,5 +1,4 @@
 fastapi
 uvicorn
-pandas
-sqlite-utils
 python-multipart
+requests
