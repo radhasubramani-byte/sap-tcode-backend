@@ -1,13 +1,13 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import sqlite3
-from typing import Optional, Dict, Any
+import re
 
-app = FastAPI(title="SAP TCode Backend")
+app = FastAPI(title="SAP ECC TCode Search API")
 
-# -----------------------------
-# CORS (required for VAPI + web)
-# -----------------------------
+# --------------------------------------------------
+# CORS (important for VAPI + external callers)
+# --------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -16,18 +16,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --------------------------------------------------
+# DATABASE
+# --------------------------------------------------
 DB_PATH = "sap_tcodes.db"
 
-
-# --------------------------------------------------
-# Database connection
-# --------------------------------------------------
 def get_db():
-    return sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 
 # --------------------------------------------------
-# Health check
+# HEALTH CHECK
 # --------------------------------------------------
 @app.get("/health")
 def health():
@@ -35,105 +36,117 @@ def health():
 
 
 # --------------------------------------------------
-# ECC fallback (safe stub if none found)
-# Replace later if you want community scraping
+# NORMALIZE USER LANGUAGE → SAFE FTS QUERY
+# Prevents SQLite MATCH crashes
 # --------------------------------------------------
-def ecc_community_search(query: str) -> Optional[Dict[str, Any]]:
-    # You can later plug your ECC search here
-    return None
+def normalize_query(text: str) -> str:
+
+    text = text.lower().strip()
+
+    # remove characters that break FTS parser
+    text = re.sub(r"[^a-z0-9\s]", " ", text)
+
+    words = [w for w in text.split() if len(w) > 2]
+
+    if not words:
+        return text
+
+    # OR search improves recall dramatically
+    return " OR ".join(words)
 
 
 # --------------------------------------------------
-# Search T-Code (Alias → FTS → Fallback)
-# CONSISTENT RESPONSE STRUCTURE (CRITICAL FOR VAPI)
+# ECC COMMUNITY FALLBACK
+# Always return SAFE schema
+# --------------------------------------------------
+def ecc_community_search(query: str):
+
+    # minimal safe fallback
+    return {
+        "source": "fallback",
+        "confidence": 0.40,
+        "results": [],
+        "message": "No confirmed ECC transaction found"
+    }
+
+
+# --------------------------------------------------
+# MAIN SEARCH ENDPOINT
+# Alias → FTS → Fallback
 # --------------------------------------------------
 @app.post("/search-tcode")
 def search_tcode(payload: dict):
-    query = payload.get("query", "").lower().strip()
+
+    query = payload.get("query", "")
     if not query:
         raise HTTPException(status_code=400, detail="query required")
 
     conn = get_db()
     cur = conn.cursor()
 
-    # --------------------------------------------------
-    # 1️⃣ Alias lookup (highest confidence)
-    # --------------------------------------------------
-    cur.execute(
-        "SELECT tcode, canonical_desc FROM aliases WHERE lower(alias) = ?",
-        (query,)
-    )
-    row = cur.fetchone()
+    clean_query = query.lower().strip()
 
-    if row:
-        conn.close()
-        return {
-            "found": True,
-            "tcode": row[0],
-            "description": row[1],
-            "module": "Unknown",
-            "confidence": 0.95,
-            "source": "alias",
-            "alternatives": []
-        }
-
-    # --------------------------------------------------
-    # 2️⃣ Full Text Search (main database)
-    # --------------------------------------------------
+    # ---------------------------
+    # 1️⃣ Alias Lookup
+    # ---------------------------
     try:
+        cur.execute(
+            "SELECT tcode, canonical_desc FROM aliases WHERE alias = ?",
+            (clean_query,)
+        )
+        row = cur.fetchone()
+
+        if row:
+            return {
+                "source": "alias",
+                "confidence": 0.95,
+                "results": [
+                    {
+                        "tcode": row["tcode"],
+                        "description": row["canonical_desc"],
+                        "module": "General"
+                    }
+                ]
+            }
+
+    except Exception as e:
+        print("Alias search error:", e)
+
+
+    # ---------------------------
+    # 2️⃣ FTS SEARCH (SAFE)
+    # ---------------------------
+    try:
+        fts_query = normalize_query(clean_query)
+
         cur.execute("""
             SELECT tcode, description, module
             FROM tcodes_fts
             WHERE tcodes_fts MATCH ?
             LIMIT 5
-        """, (query,))
+        """, (fts_query,))
+
         rows = cur.fetchall()
-    except Exception:
-        rows = []
 
-    if rows:
-        best = rows[0]
-        conn.close()
-        return {
-            "found": True,
-            "tcode": best[0],
-            "description": best[1],
-            "module": best[2],
-            "confidence": 0.85,
-            "source": "search",
-            "alternatives": [
-                {"tcode": r[0], "description": r[1], "module": r[2]}
-                for r in rows[1:]
-            ]
-        }
+        if rows:
+            return {
+                "source": "fts",
+                "confidence": 0.85,
+                "results": [
+                    {
+                        "tcode": r["tcode"],
+                        "description": r["description"],
+                        "module": r["module"]
+                    }
+                    for r in rows
+                ]
+            }
 
-    # --------------------------------------------------
-    # 3️⃣ ECC fallback search
-    # --------------------------------------------------
-    fallback = ecc_community_search(query)
+    except Exception as e:
+        print("FTS FAILED:", e)
 
-    if fallback:
-        conn.close()
-        return {
-            "found": True,
-            "tcode": fallback.get("tcode"),
-            "description": fallback.get("description"),
-            "module": fallback.get("module", "ECC"),
-            "confidence": 0.55,
-            "source": "fallback",
-            "alternatives": []
-        }
 
-    # --------------------------------------------------
-    # 4️⃣ Nothing found
-    # --------------------------------------------------
-    conn.close()
-    return {
-        "found": False,
-        "tcode": None,
-        "description": None,
-        "module": None,
-        "confidence": 0.0,
-        "source": "none",
-        "alternatives": []
-    }
+    # ---------------------------
+    # 3️⃣ FALLBACK
+    # ---------------------------
+    return ecc_community_search(clean_query)
