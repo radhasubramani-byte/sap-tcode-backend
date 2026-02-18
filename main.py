@@ -1,69 +1,52 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 import sqlite3
-import csv
-import io
-import requests
+from typing import Optional, Dict, Any
+
+app = FastAPI(title="SAP TCode Backend")
+
+# -----------------------------
+# CORS (required for VAPI + web)
+# -----------------------------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 DB_PATH = "sap_tcodes.db"
 
-app = FastAPI(
-    title="SAP T-Code Lookup API",
-    version="1.0.0",
-    description="SAP ECC T-Code lookup with alias intelligence and fallback search"
-)
 
 # --------------------------------------------------
-# Database
+# Database connection
 # --------------------------------------------------
-
 def get_db():
-    return sqlite3.connect(DB_PATH, check_same_thread=False)
+    return sqlite3.connect(DB_PATH)
 
-def init_db():
-    conn = get_db()
-    cur = conn.cursor()
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS tcodes (
-            tcode TEXT PRIMARY KEY,
-            description TEXT,
-            module TEXT
-        )
-    """)
-
-    cur.execute("""
-        CREATE VIRTUAL TABLE IF NOT EXISTS tcodes_fts
-        USING fts5(tcode, description, module)
-    """)
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS aliases (
-            alias TEXT PRIMARY KEY,
-            tcode TEXT,
-            canonical_desc TEXT
-        )
-    """)
-
-    conn.commit()
-    conn.close()
-
-@app.on_event("startup")
-def startup():
-    init_db()
 
 # --------------------------------------------------
-# Health
+# Health check
 # --------------------------------------------------
-
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
+
+# --------------------------------------------------
+# ECC fallback (safe stub if none found)
+# Replace later if you want community scraping
+# --------------------------------------------------
+def ecc_community_search(query: str) -> Optional[Dict[str, Any]]:
+    # You can later plug your ECC search here
+    return None
+
+
 # --------------------------------------------------
 # Search T-Code (Alias → FTS → Fallback)
+# CONSISTENT RESPONSE STRUCTURE (CRITICAL FOR VAPI)
 # --------------------------------------------------
-
 @app.post("/search-tcode")
 def search_tcode(payload: dict):
     query = payload.get("query", "").lower().strip()
@@ -73,169 +56,84 @@ def search_tcode(payload: dict):
     conn = get_db()
     cur = conn.cursor()
 
-    # 1️⃣ Alias lookup
+    # --------------------------------------------------
+    # 1️⃣ Alias lookup (highest confidence)
+    # --------------------------------------------------
     cur.execute(
-        "SELECT tcode, canonical_desc FROM aliases WHERE alias = ?",
+        "SELECT tcode, canonical_desc FROM aliases WHERE lower(alias) = ?",
         (query,)
     )
     row = cur.fetchone()
+
     if row:
+        conn.close()
         return {
-            "source": "alias",
-            "confidence": 0.95,
+            "found": True,
             "tcode": row[0],
-            "description": row[1]
+            "description": row[1],
+            "module": "Unknown",
+            "confidence": 0.95,
+            "source": "alias",
+            "alternatives": []
         }
 
-    # 2️⃣ FTS lookup
-    cur.execute("""
-        SELECT tcode, description, module
-        FROM tcodes_fts
-        WHERE tcodes_fts MATCH ?
-        LIMIT 3
-    """, (query,))
-    rows = cur.fetchall()
+    # --------------------------------------------------
+    # 2️⃣ Full Text Search (main database)
+    # --------------------------------------------------
+    try:
+        cur.execute("""
+            SELECT tcode, description, module
+            FROM tcodes_fts
+            WHERE tcodes_fts MATCH ?
+            LIMIT 5
+        """, (query,))
+        rows = cur.fetchall()
+    except Exception:
+        rows = []
 
     if rows:
+        best = rows[0]
+        conn.close()
         return {
-            "source": "fts",
+            "found": True,
+            "tcode": best[0],
+            "description": best[1],
+            "module": best[2],
             "confidence": 0.85,
-            "results": [
+            "source": "search",
+            "alternatives": [
                 {"tcode": r[0], "description": r[1], "module": r[2]}
-                for r in rows
+                for r in rows[1:]
             ]
         }
 
-    # 3️⃣ Fallback ECC community search
+    # --------------------------------------------------
+    # 3️⃣ ECC fallback search
+    # --------------------------------------------------
     fallback = ecc_community_search(query)
-    return fallback
 
-
-# --------------------------------------------------
-# ECC Community Fallback (EXPOSED IN DOCS)
-# --------------------------------------------------
-
-@app.get(
-    "/fallback/ecc-community-search",
-    tags=["Fallback"],
-    summary="ECC-only SAP Community fallback search"
-)
-def ecc_community_search(
-    query: str = Query(..., description="Business task, e.g. 'reverse goods receipt'")
-):
-    search_q = f"site:community.sap.com {query} SAP ECC tcode -S/4HANA -HANA"
-
-    try:
-        r = requests.get(
-            "https://duckduckgo.com/html/",
-            params={"q": search_q},
-            timeout=10
-        )
-    except Exception:
+    if fallback:
+        conn.close()
         return {
-            "found": False,
-            "confidence": 0.2,
-            "message": "Fallback search failed"
+            "found": True,
+            "tcode": fallback.get("tcode"),
+            "description": fallback.get("description"),
+            "module": fallback.get("module", "ECC"),
+            "confidence": 0.55,
+            "source": "fallback",
+            "alternatives": []
         }
 
-    text = r.text.upper()
-    known_ecc = ["MBST", "MIGO", "FB08", "VL09"]
-    matches = [t for t in known_ecc if t in text]
-
-    if not matches:
-        return {
-            "found": False,
-            "confidence": 0.25,
-            "message": "No ECC t-code found"
-        }
-
+    # --------------------------------------------------
+    # 4️⃣ Nothing found
+    # --------------------------------------------------
+    conn.close()
     return {
-        "found": True,
-        "confidence": 0.55,
-        "candidates": matches,
-        "source": "SAP Community (ECC only)"
+        "found": False,
+        "tcode": None,
+        "description": None,
+        "module": None,
+        "confidence": 0.0,
+        "source": "none",
+        "alternatives": []
     }
-
-# --------------------------------------------------
-# Admin: Upload Alias CSV
-# --------------------------------------------------
-
-@app.post("/admin/upload-aliases", tags=["Admin"])
-def upload_aliases(file: UploadFile = File(...)):
-    if not file.filename.endswith(".csv"):
-        raise HTTPException(status_code=400, detail="CSV required")
-
-    content = file.file.read().decode("utf-8")
-    reader = csv.DictReader(io.StringIO(content))
-
-    required = {"alias", "tcode", "canonical_desc"}
-    if not required.issubset(reader.fieldnames):
-        raise HTTPException(
-            status_code=400,
-            detail="CSV must contain: alias,tcode,canonical_desc"
-        )
-
-    conn = get_db()
-    cur = conn.cursor()
-    count = 0
-
-    for row in reader:
-        cur.execute("""
-            INSERT OR REPLACE INTO aliases(alias, tcode, canonical_desc)
-            VALUES (?, ?, ?)
-        """, (
-            row["alias"].strip().lower(),
-            row["tcode"].strip().upper(),
-            row["canonical_desc"].strip()
-        ))
-        count += 1
-
-    conn.commit()
-    conn.close()
-
-    return {"status": "success", "rows_loaded": count}
-
-# --------------------------------------------------
-# Admin: Upload T-Code CSV
-# --------------------------------------------------
-
-@app.post("/admin/upload-tcodes", tags=["Admin"])
-def upload_tcodes(file: UploadFile = File(...)):
-    if not file.filename.endswith(".csv"):
-        raise HTTPException(status_code=400, detail="CSV required")
-
-    content = file.file.read().decode("utf-8")
-    reader = csv.DictReader(io.StringIO(content))
-
-    required = {"tcode", "description", "module"}
-    if not required.issubset(reader.fieldnames):
-        raise HTTPException(
-            status_code=400,
-            detail="CSV must contain: tcode,description,module"
-        )
-
-    conn = get_db()
-    cur = conn.cursor()
-    count = 0
-
-    for row in reader:
-        tcode = row["tcode"].strip().upper()
-        desc = row["description"].strip()
-        mod = row["module"].strip()
-
-        cur.execute("""
-            INSERT OR REPLACE INTO tcodes(tcode, description, module)
-            VALUES (?, ?, ?)
-        """, (tcode, desc, mod))
-
-        cur.execute("""
-            INSERT INTO tcodes_fts(tcode, description, module)
-            VALUES (?, ?, ?)
-        """, (tcode, desc, mod))
-
-        count += 1
-
-    conn.commit()
-    conn.close()
-
-    return {"status": "success", "rows_loaded": count}
