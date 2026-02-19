@@ -1,56 +1,112 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
 import csv
 import os
+import re
 
 app = FastAPI(title="SAP TCode Search API")
 
-DATA_FILE = "tcodes.csv"
+# Allow VAPI / browser calls
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# ---------- Load data at startup ----------
-tcodes_data = []
-
-def load_data():
-    global tcodes_data
-    if not os.path.exists(DATA_FILE):
-        print("tcodes.csv NOT FOUND")
-        return
-
-    with open(DATA_FILE, newline='', encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        tcodes_data = [row for row in reader]
-
-    print(f"Loaded {len(tcodes_data)} tcodes")
-
-load_data()
-
-
-# ---------- Request Model ----------
+# ----------------------------
+# Data Model
+# ----------------------------
 class SearchRequest(BaseModel):
     query: str
 
+# ----------------------------
+# Load CSV (comma separated)
+# ----------------------------
+TCODES = []
+CSV_PATH = "tcodes.csv"
 
-# ---------- Health ----------
+if not os.path.exists(CSV_PATH):
+    print("WARNING: tcodes.csv not found in root directory")
+else:
+    with open(CSV_PATH, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            tcode = (row.get("tcode") or "").strip()
+            desc = (row.get("description") or "").strip()
+            module = (row.get("module") or "").strip()
+
+            if tcode and desc:
+                TCODES.append({
+                    "tcode": tcode.upper(),
+                    "description": desc,
+                    "module": module
+                })
+
+print(f"Loaded {len(TCODES)} tcodes")
+
+# ----------------------------
+# Text Helpers
+# ----------------------------
+
+def normalize(text: str) -> str:
+    text = text.lower()
+    text = re.sub(r"[^a-z0-9 ]+", " ", text)
+    return re.sub(r"\\s+", " ", text).strip()
+
+
+def score_match(query: str, description: str) -> float:
+    q = normalize(query)
+    d = normalize(description)
+
+    if q in d:
+        return 1.0
+
+    q_words = set(q.split())
+    d_words = set(d.split())
+
+    if not q_words:
+        return 0
+
+    overlap = len(q_words & d_words)
+    return overlap / len(q_words)
+
+# ----------------------------
+# Routes
+# ----------------------------
+
 @app.get("/")
 def root():
-    return {"status": "API running", "records": len(tcodes_data)}
+    return {"status": "SAP TCode API running", "loaded_tcodes": len(TCODES)}
 
 
-# ---------- Search ----------
 @app.post("/search-tcode")
-def search_tcode(request: SearchRequest):
-    q = request.query.lower()
+def search_tcode(req: SearchRequest):
+    if not TCODES:
+        raise HTTPException(status_code=500, detail="TCode dataset not loaded")
 
-    results = []
-    for row in tcodes_data:
-        text = f"{row.get('tcode','')} {row.get('description','')}".lower()
-        if q in text:
-            results.append(row)
+    query = req.query.strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="Query cannot be empty")
 
-        if len(results) >= 5:
-            break
+    matches = []
+    for row in TCODES:
+        s = score_match(query, row["description"])
+        if s > 0:
+            matches.append({
+                "tcode": row["tcode"],
+                "description": row["description"],
+                "module": row["module"],
+                "score": round(s, 3)
+            })
+
+    matches.sort(key=lambda x: x["score"], reverse=True)
+    top = matches[:5]
 
     return {
-        "query": request.query,
-        "results": results
+        "query": query,
+        "count": len(top),
+        "results": top
     }
