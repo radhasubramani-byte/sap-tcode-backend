@@ -1,109 +1,106 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import sqlite3
-import os
 
-app = FastAPI(title="SAP TCode Backend")
+app = FastAPI(title="SAP ECC TCode API")
 
 DB_PATH = "sap_tcodes.db"
 
-# -------------------------
-
-# Request Model
-
-# -------------------------
+-----------------------------
+Request Model
+-----------------------------
 
 class SearchRequest(BaseModel):
 query: str
 
-# -------------------------
-
-# Database Connection
-
-# -------------------------
+-----------------------------
+Database
+-----------------------------
 
 def get_db():
-if not os.path.exists(DB_PATH):
-raise HTTPException(status_code=500, detail="Database not found")
-
-```
 conn = sqlite3.connect(DB_PATH)
 conn.row_factory = sqlite3.Row
 return conn
-```
 
-# -------------------------
-
-# Health Check
-
-# -------------------------
+-----------------------------
+Health
+-----------------------------
 
 @app.get("/health")
 def health():
 return {"status": "ok"}
 
-# -------------------------
-
-# SEARCH TCODE
-
-# -------------------------
+-----------------------------
+Search TCode
+-----------------------------
 
 @app.post("/search-tcode")
 def search_tcode(req: SearchRequest):
-query = req.query.lower().strip()
 
-```
+query = req.query.lower().strip()
 if not query:
     raise HTTPException(status_code=400, detail="query required")
 
 conn = get_db()
 cur = conn.cursor()
 
-# 1️⃣ Alias lookup
+# 1️⃣ Alias search
 cur.execute(
-    "SELECT tcode, canonical_desc FROM aliases WHERE lower(alias)=?",
+    "SELECT tcode, canonical_desc FROM aliases WHERE alias = ?",
     (query,)
 )
 row = cur.fetchone()
-
 if row:
     return {
+        "found": True,
         "source": "alias",
         "confidence": 0.95,
         "tcode": row["tcode"],
         "description": row["canonical_desc"],
-        "module": "MM"
+        "module": None,
+        "alternatives": []
     }
 
-# 2️⃣ Description LIKE search (robust for voice)
-cur.execute("""
+# 2️⃣ FTS search
+cur.execute(
+    """
     SELECT tcode, description, module
-    FROM tcodes
-    WHERE lower(description) LIKE ?
+    FROM tcodes_fts
+    WHERE tcodes_fts MATCH ?
     LIMIT 5
-""", (f"%{query}%",))
-
+    """,
+    (query,)
+)
 rows = cur.fetchall()
 
 if rows:
+    best = rows[0]
+    alternatives = []
+
+    for r in rows[1:]:
+        alternatives.append({
+            "tcode": r["tcode"],
+            "description": r["description"],
+            "module": r["module"]
+        })
+
     return {
-        "source": "database",
-        "confidence": 0.9,
-        "results": [
-            {
-                "tcode": r["tcode"],
-                "description": r["description"],
-                "module": r["module"]
-            }
-            for r in rows
-        ]
+        "found": True,
+        "source": "fts",
+        "confidence": 0.85,
+        "tcode": best["tcode"],
+        "description": best["description"],
+        "module": best["module"],
+        "alternatives": alternatives
     }
 
 # 3️⃣ Nothing found
 return {
-    "source": "fallback",
-    "confidence": 0.3,
-    "results": [],
-    "message": "No ECC transaction found"
+    "found": False,
+    "source": "none",
+    "confidence": 0.0,
+    "tcode": None,
+    "description": None,
+    "module": None,
+    "alternatives": []
 }
-```
