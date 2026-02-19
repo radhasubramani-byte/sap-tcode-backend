@@ -1,107 +1,135 @@
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
 import sqlite3
 import os
+import csv
 
-app = FastAPI()
+app = FastAPI(title="SAP TCode Search API")
 
 DB_PATH = "sap_tcodes.db"
+CSV_PATH = "tcodes.csv"
 
 
-# -----------------------------
-# Request Schema
-# -----------------------------
-class SearchRequest(BaseModel):
-    query: str
+# --------------------------------------------------
+# DATABASE INITIALIZATION (RUNS ON STARTUP)
+# --------------------------------------------------
+def init_db():
 
-
-# -----------------------------
-# DB Connection
-# -----------------------------
-def get_db():
-    if not os.path.exists(DB_PATH):
-        raise HTTPException(status_code=500, detail="Database not found")
+    first_time = not os.path.exists(DB_PATH)
 
     conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    cur = conn.cursor()
+
+    # Main table
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS tcodes (
+        tcode TEXT PRIMARY KEY,
+        description TEXT,
+        module TEXT
+    )
+    """)
+
+    # Alias table
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS aliases (
+        alias TEXT PRIMARY KEY,
+        tcode TEXT,
+        canonical_desc TEXT
+    )
+    """)
+
+    # FTS search index
+    cur.execute("""
+    CREATE VIRTUAL TABLE IF NOT EXISTS tcodes_fts USING fts5(
+        tcode, description, module
+    )
+    """)
+
+    # If empty → load CSV
+    cur.execute("SELECT COUNT(*) FROM tcodes")
+    count = cur.fetchone()[0]
+
+    if count == 0:
+        print("Loading TCode CSV into database...")
+
+        with open(CSV_PATH, newline='', encoding="utf-8") as f:
+            reader = csv.reader(f)
+            for row in reader:
+                if len(row) < 3:
+                    continue
+                tcode, desc, module = row[0].strip(), row[1].strip(), row[2].strip()
+                cur.execute("INSERT OR IGNORE INTO tcodes VALUES (?, ?, ?)", (tcode, desc, module))
+                cur.execute("INSERT INTO tcodes_fts VALUES (?, ?, ?)", (tcode, desc, module))
+
+        # Build aliases automatically
+        cur.execute("""
+        INSERT OR IGNORE INTO aliases
+        SELECT LOWER(description), tcode, description FROM tcodes
+        """)
+
+        print("Database initialized successfully")
+
+    conn.commit()
+    conn.close()
 
 
-# -----------------------------
-# Health
-# -----------------------------
-@app.get("/health")
-def health():
-    return {"status": "ok"}
+@app.on_event("startup")
+def startup():
+    init_db()
 
 
-# -----------------------------
-# Search T-Code
-# -----------------------------
+# --------------------------------------------------
+# SEARCH API
+# --------------------------------------------------
 @app.post("/search-tcode")
-def search_tcode(req: SearchRequest):
+def search_tcode(payload: dict):
 
-    query = req.query.lower().strip()
+    query = payload.get("query", "").lower().strip()
     if not query:
         raise HTTPException(status_code=400, detail="query required")
 
-    conn = get_db()
+    conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
 
-    # --------------------------------------------------
-    # 1️⃣ Alias Search
-    # --------------------------------------------------
+    # 1️⃣ Alias lookup (HIGH CONFIDENCE)
     cur.execute(
         "SELECT tcode, canonical_desc FROM aliases WHERE alias = ?",
         (query,)
     )
     row = cur.fetchone()
-
     if row:
+        conn.close()
         return {
-            "source": "alias",
+            "match_type": "exact",
             "confidence": 0.95,
-            "results": [
-                {
-                    "tcode": row["tcode"],
-                    "description": row["canonical_desc"],
-                    "module": "Unknown"
-                }
-            ]
+            "tcode": row[0],
+            "description": row[1],
+            "module": None
         }
 
-    # --------------------------------------------------
-    # 2️⃣ FTS Search (MAIN SEARCH)
-    # --------------------------------------------------
+    # 2️⃣ FTS search
     cur.execute("""
         SELECT tcode, description, module
         FROM tcodes_fts
         WHERE tcodes_fts MATCH ?
-        LIMIT 5
+        LIMIT 3
     """, (query,))
-
     rows = cur.fetchall()
+
+    conn.close()
 
     if rows:
         return {
-            "source": "fts",
+            "match_type": "search",
             "confidence": 0.85,
             "results": [
-                {
-                    "tcode": r["tcode"],
-                    "description": r["description"],
-                    "module": r["module"]
-                }
+                {"tcode": r[0], "description": r[1], "module": r[2]}
                 for r in rows
             ]
         }
 
-    # --------------------------------------------------
-    # 3️⃣ Fallback (Always valid JSON)
-    # --------------------------------------------------
+    # 3️⃣ No result
     return {
-        "source": "fallback",
-        "confidence": 0.3,
-        "results": [],
-        "message": "No confirmed ECC transaction found"
+        "match_type": "none",
+        "confidence": 0.0,
+        "results": []
     }
