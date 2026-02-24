@@ -1,18 +1,26 @@
-from langchain_openai import OpenAIEmbeddings
-from langchain_community.vectorstores import FAISS
+# app/services/embedding_service.py
 
-vector_store = None
+import os
+from openai import OpenAI
 
-def build_vector_store(documents):
-    global vector_store
-    embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
-    vector_store = FAISS.from_texts(documents, embeddings)
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-def search_documents(query: str, k: int = 5):
-    global vector_store
+MODEL = "text-embedding-3-small"
 
-    if vector_store is None:
-        return ["Knowledge not loaded"]
 
-    docs = vector_store.similarity_search(query, k=k)
-    return [d.page_content for d in docs]
+def embed_query(text: str):
+    """Create embedding for a search query"""
+    response = client.embeddings.create(
+        model=MODEL,
+        input=text
+    )
+    return response.data[0].embedding
+
+
+def embed_documents(texts):
+    """Create embeddings for many texts"""
+    response = client.embeddings.create(
+        model=MODEL,
+        input=texts
+    )
+    return [item.embedding for item in response.data]
