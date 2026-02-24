@@ -1,44 +1,42 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from app.services.search_service import search_tcode
 import os
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import JSONResponse
+import uvicorn
 
-app = FastAPI(title="SAP TCode Backend")
+# Lazy import to avoid heavy startup during Render boot scan
+search_service = None
 
-# Allow all origins (for Vercel frontend later)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+def get_search_service():
+    global search_service
+    if search_service is None:
+        from search_service import SearchService
+        search_service = SearchService()
+    return search_service
 
-# -----------------------------
-# Root endpoint (Render check)
-# -----------------------------
+app = FastAPI(title="SAP TCode Backend", version="1.0.0")
+
+
 @app.get("/")
 def root():
-    return {
-        "service": "SAP TCode Search API",
-        "status": "running"
-    }
+    return {"status": "ok", "service": "sap-tcode-backend"}
 
-# -----------------------------
-# Health check (IMPORTANT)
-# -----------------------------
+
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    # very lightweight — Render uses this to verify service
+    return {"status": "healthy"}
 
-# -----------------------------
-# Search endpoint
-# -----------------------------
+
 @app.get("/search")
-def search(query: str):
-    results = search_tcode(query)
-    return {
-        "query": query,
-        "count": len(results),
-        "results": results
-    }
+def search(q: str = Query(..., min_length=1)):
+    try:
+        svc = get_search_service()
+        results = svc.search(q)
+        return JSONResponse({"query": q, "results": results})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)
