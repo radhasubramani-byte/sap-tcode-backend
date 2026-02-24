@@ -1,3 +1,4 @@
 !tcodes.csv
 *.xlsx
 *.txt
+.env 
