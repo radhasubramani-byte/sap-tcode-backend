@@ -1,13 +1,11 @@
-import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
-# Import router
 from app.services.search_service import search_tcode
+import os
 
-app = FastAPI(title="SAP TCode Search API")
+app = FastAPI(title="SAP TCode Backend")
 
-# CORS (important for frontend later)
+# Allow all origins (for Vercel frontend later)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -16,19 +14,31 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# -----------------------------
+# Root endpoint (Render check)
+# -----------------------------
 @app.get("/")
-def health():
-    return {"status": "running", "service": "sap-tcode-backend"}
+def root():
+    return {
+        "service": "SAP TCode Search API",
+        "status": "running"
+    }
 
+# -----------------------------
+# Health check (IMPORTANT)
+# -----------------------------
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+# -----------------------------
+# Search endpoint
+# -----------------------------
 @app.get("/search")
 def search(query: str):
-    result = search_tcode(query)
-    return {"results": result}
-
-
-# IMPORTANT — Render needs this
-if __name__ == "__main__":
-    import uvicorn
-
-    port = int(os.environ.get("PORT", 10000))  # Render injects PORT
-    uvicorn.run("main:app", host="0.0.0.0", port=port)
+    results = search_tcode(query)
+    return {
+        "query": query,
+        "count": len(results),
+        "results": results
+    }
