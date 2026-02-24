@@ -1,0 +1,34 @@
+alias,tcode,module
+po,ME21N,MM
+p.o,ME21N,MM
+purchase order,ME21N,MM
+create purchase order,ME21N,MM
+change purchase order,ME22N,MM
+display purchase order,ME23N,MM
+pir,ME11,MM
+purchase info record,ME11,MM
+create info record,ME11,MM
+change info record,ME12,MM
+display info record,ME13,MM
+goods receipt,MIGO,MM
+post goods receipt,MIGO,MM
+material master,MM01,MM
+create material,MM01,MM
+change material,MM02,MM
+display material,MM03,MM
+sales order,VA01,SD
+create sales order,VA01,SD
+change sales order,VA02,SD
+display sales order,VA03,SD
+delivery,VL01N,SD
+create delivery,VL01N,SD
+billing,VF01,SD
+create invoice,VF01,SD
+vendor master,XK01,MDM
+create vendor,XK01,MDM
+customer master,XD01,MDM
+create customer,XD01,MDM
+GL account,FS00,FI
+General Ledger,FS00,FI
+Post journal entry,FB50,FI
+Financial posting,FB50,FI

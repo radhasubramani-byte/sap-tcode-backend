@@ -1,30 +1,29 @@
-# ---------- Base Image ----------
 FROM python:3.10-slim
 
-# Prevent python buffering
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-
-# System deps
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
-
-# ---------- Workdir ----------
 WORKDIR /app
 
-# ---------- Install dependencies FIRST (important for cache) ----------
+# Prevent Python from buffering logs
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# Install system deps
+RUN apt-get update && apt-get install -y \
+    gcc \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# ---- IMPORTANT: copy requirements FIRST ----
 COPY requirements.txt .
 
+# Install python dependencies
 RUN pip install --no-cache-dir --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
-# ---------- Copy project ----------
+# Now copy project files
 COPY . .
 
-# ---------- Expose ----------
-EXPOSE 10000
+# Expose port
+EXPOSE 8000
 
-# ---------- Start server ----------
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "10000"]
+# Start server
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,0 +1,41 @@
+alias,tcode,canonical_desc
+create sales order,VA01,Create Sales Order
+new sales order,VA01,Create Sales Order
+sales order,VA01,Create Sales Order
+raise sales order,VA01,Create Sales Order
+change sales order,VA02,Change Sales Order
+modify sales order,VA02,Change Sales Order
+edit sales order,VA02,Change Sales Order
+display sales order,VA03,Display Sales Order
+view sales order,VA03,Display Sales Order
+check sales order,VA03,Display Sales Order
+create delivery,VL01N,Create Outbound Delivery
+outbound delivery,VL01N,Create Outbound Delivery
+make delivery,VL01N,Create Outbound Delivery
+change delivery,VL02N,Change Outbound Delivery
+edit delivery,VL02N,Change Outbound Delivery
+display delivery,VL03N,Display Outbound Delivery
+post goods issue,VL02N,Post Goods Issue
+pg i,VL02N,Post Goods Issue
+billing,VF01,Create Billing Document
+create invoice,VF01,Create Billing Document
+customer invoice,VF01,Create Billing Document
+change billing,VF02,Change Billing Document
+display billing,VF03,Display Billing Document
+customer master,VD01,Create Customer
+create customer,VD01,Create Customer
+change customer,VD02,Change Customer
+display customer,VD03,Display Customer
+pricing condition,VK11,Create Pricing Condition
+maintain pricing,VK11,Create Pricing Condition
+change pricing,VK12,Change Pricing Condition
+display pricing,VK13,Display Pricing Condition
+sales report,VF05,Billing List
+billing list,VF05,Billing List
+open deliveries,VL06O,Outbound Delivery Monitor
+delivery monitor,VL06O,Outbound Delivery Monitor
+credit memo,VA01,Create Credit Memo Request
+returns order,VA01,Create Returns Order
+availability check,CO09,Availability Overview
+check availability,CO09,Availability Overview
+sales document flow,VA03,Display Sales Order
