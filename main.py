@@ -1,14 +1,13 @@
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# Import router
+from app.services.search_service import search_tcode
 
-app = FastAPI(title="SAP T-Code Backend")
+app = FastAPI(title="SAP TCode Search API")
 
-# CORS (adjust origins if needed)
+# CORS (important for frontend later)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -17,16 +16,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Import AFTER app creation to avoid circular issues
-from app.services.search_service import search_tcode
-
-
 @app.get("/")
-def health_check():
-    return {"status": "SAP T-Code backend running"}
-
+def health():
+    return {"status": "running", "service": "sap-tcode-backend"}
 
 @app.get("/search")
 def search(query: str):
-    results = search_tcode(query)
-    return {"results": results}
+    result = search_tcode(query)
+    return {"results": result}
+
+
+# IMPORTANT — Render needs this
+if __name__ == "__main__":
+    import uvicorn
+
+    port = int(os.environ.get("PORT", 10000))  # Render injects PORT
+    uvicorn.run("main:app", host="0.0.0.0", port=port)
