@@ -1,73 +1,32 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+import os
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
-import traceback
 
 # Load environment variables
 load_dotenv()
 
-# Import knowledge loader + search
-from app.services.knowledge_loader import load_knowledge
+app = FastAPI(title="SAP T-Code Backend")
+
+# CORS (adjust origins if needed)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Import AFTER app creation to avoid circular issues
 from app.services.search_service import search_tcode
 
-app = FastAPI(title="SAP TCode AI Backend")
 
-
-# -------------------------------
-# STARTUP — LOAD EMBEDDINGS
-# -------------------------------
-@app.on_event("startup")
-def startup_event():
-    try:
-        print("====================================")
-        print("Loading SAP knowledge base...")
-        load_knowledge()
-        print("SAP Knowledge Loaded Successfully")
-        print("====================================")
-    except Exception as e:
-        print("FAILED TO LOAD KNOWLEDGE BASE")
-        traceback.print_exc()
-
-
-# -------------------------------
-# REQUEST MODEL
-# -------------------------------
-class SearchRequest(BaseModel):
-    query: str
-
-
-# -------------------------------
-# HEALTH CHECK
-# -------------------------------
 @app.get("/")
-def root():
-    return {"status": "SAP TCode AI running"}
+def health_check():
+    return {"status": "SAP T-Code backend running"}
 
 
-# -------------------------------
-# SEARCH ENDPOINT (FOR VAPI)
-# -------------------------------
-@app.post("/search-tcode")
-def search_endpoint(payload: SearchRequest):
-    try:
-        if not payload.query or len(payload.query.strip()) == 0:
-            raise HTTPException(status_code=400, detail="Query required")
-
-        result = search_tcode(payload.query)
-
-        if not result:
-            return {
-                "found": False
-            }
-
-        return {
-            "found": True,
-            "tcode": result["tcode"],
-            "description": result["description"],
-            "module": result.get("module", ""),
-            "confidence": str(result.get("score", 0.9))
-        }
-
-    except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail="Search failed")
+@app.get("/search")
+def search(query: str):
+    results = search_tcode(query)
+    return {"results": results}
