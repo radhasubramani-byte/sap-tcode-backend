@@ -1,42 +1,37 @@
 import os
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import JSONResponse
-import uvicorn
+from fastapi import FastAPI, Query, HTTPException
 
-# Lazy import to avoid heavy startup during Render boot scan
-search_service = None
+# IMPORTANT: absolute package imports for Render/Linux
+from app.services.search_service import search
 
-def get_search_service():
-    global search_service
-    if search_service is None:
-        from search_service import SearchService
-        search_service = SearchService()
-    return search_service
-
-app = FastAPI(title="SAP TCode Backend", version="1.0.0")
+app = FastAPI(title="SAP TCode Semantic Search API")
 
 
 @app.get("/")
 def root():
-    return {"status": "ok", "service": "sap-tcode-backend"}
+    return {"message": "SAP TCode backend is running"}
 
 
 @app.get("/health")
 def health():
-    # very lightweight — Render uses this to verify service
     return {"status": "healthy"}
 
 
 @app.get("/search")
-def search(q: str = Query(..., min_length=1)):
+def search_endpoint(q: str = Query(..., description="Natural language SAP query")):
     try:
-        svc = get_search_service()
-        results = svc.search(q)
-        return JSONResponse({"query": q, "results": results})
+        results = search(q)
+        return {
+            "query": q,
+            "results": results
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# Render requires binding to its provided PORT
 if __name__ == "__main__":
+    import uvicorn
+
     port = int(os.environ.get("PORT", 10000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=port)
