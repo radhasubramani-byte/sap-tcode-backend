@@ -1,32 +1,87 @@
+# app/services/knowledge_loader.py
+
+from pathlib import Path
 import pandas as pd
-from app.services.embedding_service import build_vector_store
+import numpy as np
+from typing import Tuple, List, Dict
 
-def load_knowledge():
+# -------------------------------------------------------
+# Resolve absolute project paths (works in Docker/Render)
+# -------------------------------------------------------
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+DATA_DIR = BASE_DIR / "data"
 
-    documents = []
 
-    # ---------- TCodes ----------
-    tcodes = pd.read_csv("knowledge/tcodes.csv")
+def _safe_read_csv(file_path: Path) -> pd.DataFrame:
+    """Safely read CSV and raise clear error if missing."""
+    if not file_path.exists():
+        raise FileNotFoundError(
+            f"\n❌ DATA FILE MISSING: {file_path}\n"
+            f"Make sure the file exists inside the /data folder in your repo.\n"
+            f"Render path checked: {file_path}\n"
+        )
+    return pd.read_csv(file_path)
 
-    for _, row in tcodes.iterrows():
-        doc = f"""
-        TCode: {row['tcode']}
-        Description: {row['description']}
-        Module: {row['module']}
-        Keywords: {row.get('keywords','')}
-        """
-        documents.append(doc)
 
-    # ---------- Aliases ----------
-    for file in ["mm_aliases.csv","sd_aliases.csv","le_aliases.csv"]:
-        df = pd.read_csv(f"knowledge/{file}")
+def load_knowledge() -> Tuple[List[str], np.ndarray, List[Dict]]:
+    """
+    Loads SAP TCode knowledge base and returns:
+        texts      -> list[str]
+        embeddings -> np.ndarray
+        metadata   -> list[dict]
+    """
 
-        for _, row in df.iterrows():
-            doc = f"""
-            User says: {row['alias']}
-            Means: {row['meaning']}
-            TCode: {row['tcode']}
-            """
-            documents.append(doc)
+    print(f"\n📂 Loading knowledge base from: {DATA_DIR}\n")
 
-    build_vector_store(documents)
+    # -------------------------
+    # Load TCode dataset
+    # -------------------------
+    tcodes_file = DATA_DIR / "tcodes.csv"
+    df = _safe_read_csv(tcodes_file)
+
+    # Normalize column names
+    df.columns = [c.strip().lower() for c in df.columns]
+
+    required_columns = {"tcode", "description"}
+    if not required_columns.issubset(df.columns):
+        raise ValueError(
+            f"\n❌ tcodes.csv must contain columns: {required_columns}\n"
+            f"Found columns: {list(df.columns)}"
+        )
+
+    # -------------------------
+    # Prepare knowledge records
+    # -------------------------
+    texts: List[str] = []
+    metadata: List[Dict] = []
+
+    for _, row in df.iterrows():
+        tcode = str(row["tcode"]).strip()
+        description = str(row["description"]).strip()
+
+        text = f"{tcode} - {description}"
+
+        texts.append(text)
+        metadata.append(
+            {
+                "tcode": tcode,
+                "description": description,
+                "source": "tcodes.csv",
+            }
+        )
+
+    # ------------------------------------
+    # Load embeddings if precomputed exist
+    # ------------------------------------
+    embeddings_file = DATA_DIR / "embeddings.npy"
+
+    if embeddings_file.exists():
+        print("⚡ Loading precomputed embeddings")
+        embeddings = np.load(embeddings_file)
+    else:
+        print("⚠ No embeddings.npy found — embeddings will be generated at runtime")
+        embeddings = None
+
+    print(f"✅ Loaded {len(texts)} tcodes\n")
+
+    return texts, embeddings, metadata
