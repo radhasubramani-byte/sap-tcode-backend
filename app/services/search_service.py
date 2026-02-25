@@ -8,18 +8,15 @@ from app.services.embedding_service import embed_query
 # =========================================================
 # Global runtime state (DO NOT LOAD AT IMPORT TIME)
 # =========================================================
-_index = None
-_metadata = None
-_ready = False
+_index = None          # numpy matrix of embeddings
+_metadata = None       # list of dict rows
+_ready = False         # indicates embeddings finished loading
 
 
 # =========================================================
-# Status Check
+# Status Check (used by /health)
 # =========================================================
 def is_ready() -> bool:
-    """
-    Returns True when embeddings + knowledge base are ready.
-    """
     return _ready
 
 
@@ -28,8 +25,8 @@ def is_ready() -> bool:
 # =========================================================
 def initialize_search():
     """
-    Loads knowledge base and embeddings.
-    MUST ONLY RUN AFTER FASTAPI STARTS.
+    Loads knowledge base + embeddings AFTER FastAPI starts.
+    Prevents Render startup timeout.
     """
     global _index, _metadata, _ready
 
@@ -37,12 +34,25 @@ def initialize_search():
         print("Search already initialized — skipping")
         return
 
-    print("Starting knowledge loading inside initialize_search() ...")
+    print("🔄 Initializing semantic search engine...")
 
     try:
-        _index, _metadata = load_knowledge()
+        index, metadata = load_knowledge()
+
+        # Safety checks
+        if index is None or len(index) == 0:
+            raise Exception("Embeddings index empty")
+
+        # Normalize embeddings (cosine similarity safety)
+        norms = np.linalg.norm(index, axis=1, keepdims=True)
+        norms[norms == 0] = 1
+        index = index / norms
+
+        _index = index
+        _metadata = metadata
         _ready = True
-        print(f"Knowledge fully loaded! Records: {len(_metadata)}")
+
+        print(f"✅ Knowledge loaded successfully: {len(_metadata)} records")
 
     except Exception as e:
         print("❌ Failed to initialize search:", str(e))
@@ -50,18 +60,19 @@ def initialize_search():
 
 
 # =========================================================
-# Search Function
+# MAIN SEARCH FUNCTION (FastAPI uses THIS name)
 # =========================================================
-def search_tcode(query: str, top_k: int = 5) -> List[Dict]:
+def search(query: str, top_k: int = 5) -> List[Dict]:
     """
-    Semantic search for SAP T-codes.
+    Semantic SAP T-code search endpoint logic
+    This is what main.py imports
     """
 
-    # If still loading → don't crash server
+    # ---------- Warmup handling ----------
     if not _ready or _index is None:
         return [{
             "status": "warming_up",
-            "message": "Knowledge base is loading. Please retry in a few seconds."
+            "message": "AI is starting — try again in 5 seconds"
         }]
 
     if not query or not query.strip():
@@ -71,13 +82,22 @@ def search_tcode(query: str, top_k: int = 5) -> List[Dict]:
         }]
 
     try:
-        # Generate embedding
+        # ---------- Embed user query ----------
         q_emb = embed_query(query)
 
-        # Cosine similarity via dot product (normalized embeddings assumed)
+        if q_emb is None or len(q_emb) == 0:
+            return [{
+                "status": "embedding_error",
+                "message": "Failed to embed query"
+            }]
+
+        # Normalize query vector
+        q_emb = q_emb / (np.linalg.norm(q_emb) + 1e-10)
+
+        # ---------- Cosine similarity ----------
         scores = np.dot(_index, q_emb)
 
-        # Get top matches
+        # ---------- Top matches ----------
         top_indices = np.argsort(scores)[-top_k:][::-1]
 
         results = []
@@ -87,12 +107,13 @@ def search_tcode(query: str, top_k: int = 5) -> List[Dict]:
             results.append({
                 "tcode": item.get("tcode"),
                 "description": item.get("description"),
-                "score": float(scores[idx])
+                "score": round(float(scores[idx]), 4)
             })
 
         return results
 
     except Exception as e:
+        print("Search runtime error:", str(e))
         return [{
             "status": "error",
             "message": f"Search failed: {str(e)}"
