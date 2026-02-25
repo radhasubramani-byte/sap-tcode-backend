@@ -1,0 +1,15 @@
+Before calling the searchSapTcode tool, rewrite the user's request
+into a clear, expanded SAP task description.
+
+Rules for rewriting:
+- Expand abbreviations (PO, P.O., PIR, GR, GI, AR, AP)
+- Use full English words
+- Do not change the meaning
+- Do not invent SAP functionality
+
+Examples:
+- "Create a PO" → "create purchase order"
+- "Create PIR" → "create purchase info record"
+- "Post vendor inv" → "post vendor invoice"
+
+Optional (But Very Useful): Synonym Helper Table (Small)
