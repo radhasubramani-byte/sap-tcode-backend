@@ -1,8 +1,8 @@
 import numpy as np
 from typing import List, Dict
 
-from app.services.knowledge_loader import load_knowledge
-from app.services.embedding_service import embed_query
+load_knowledge = None
+embed_query = None
 
 
 # =========================================================
@@ -25,8 +25,11 @@ def is_ready() -> bool:
 # =========================================================
 def initialize_search():
     """
-    Loads knowledge base + embeddings AFTER FastAPI starts.
-    Prevents Render startup timeout.
+        global _index, _metadata, _ready, load_knowledge, embed_query
+
+    from app.services.knowledge_loader import load_knowledge
+    from app.services.embedding_service import embed_query
+
     """
     global _index, _metadata, _ready
 

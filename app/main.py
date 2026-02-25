@@ -1,50 +1,45 @@
-from fastapi import FastAPI, Query
+from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-import os
+import threading
+import time
 
-# IMPORTANT: absolute imports from app package
-from app.services.search_service import search_tcode
-from app.services.knowledge_loader import load_knowledge
+app = FastAPI()
 
-app = FastAPI(title="SAP TCode Search API")
-
-
-# ---------- STARTUP ----------
-@app.on_event("startup")
-def startup_event():
-    print("🚀 Starting SAP TCode API...")
-    load_knowledge()
-    print("✅ Knowledge loaded successfully")
-
-
-# ---------- HEALTH CHECK ----------
+# -------------------------------------------
+# HEALTH CHECK (Render requirement)
+# -------------------------------------------
 @app.get("/health")
 def health():
     return {"status": "healthy"}
 
 
-# ---------- ROOT ----------
-@app.get("/")
-def root():
-    return {"message": "SAP TCode API running"}
+# -------------------------------------------
+# BACKGROUND INITIALIZER
+# -------------------------------------------
+def start_initializer():
+    from app.services.search_service import initialize_search
+    print("Starting background knowledge initialization...")
+    initialize_search()
 
 
-# ---------- SEARCH ----------
+@app.on_event("startup")
+def startup_event():
+    thread = threading.Thread(target=start_initializer, daemon=True)
+    thread.start()
+
+
+# -------------------------------------------
+# SEARCH ENDPOINT
+# -------------------------------------------
 @app.get("/search")
-def search(q: str = Query(..., description="Search query")):
-    try:
-        results = search_tcode(q)
+def search(q: str):
+    from app.services.search_service import search_tcode, is_ready
 
-        return JSONResponse(
-            content={
-                "query": q,
-                "count": len(results),
-                "results": results
-            }
-        )
+    if not is_ready():
+        return JSONResponse({
+            "status": "warming_up",
+            "message": "AI knowledge base loading (~20s first deploy)"
+        })
 
-    except Exception as e:
-        return JSONResponse(
-            status_code=500,
-            content={"error": str(e)}
-        )
+    results = search_tcode(q)
+    return {"results": results}
