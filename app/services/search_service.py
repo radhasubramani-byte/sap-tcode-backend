@@ -1,102 +1,123 @@
 import numpy as np
 from typing import List, Dict
-from sentence_transformers import SentenceTransformer
-import faiss
 
-from app.services.knowledge_loader import load_knowledge
-
-
-# -------------------------------
-# Configuration (tunable logic)
-# -------------------------------
-HIGH_CONFIDENCE = 0.72
-MEDIUM_CONFIDENCE = 0.45
-LOW_CONFIDENCE = 0.30
+load_knowledge = None
+embed_query = None
 
 
-class TCodeSearchService:
-    def __init__(self):
-        self.model = SentenceTransformer("all-MiniLM-L6-v2")
+# =========================================================
+# Global runtime state (DO NOT LOAD AT IMPORT TIME)
+# =========================================================
+_index = None          # numpy matrix of embeddings
+_metadata = None       # list of dict rows
+_ready = False         # indicates embeddings finished loading
 
-        # Load knowledge base
-        self.tcodes = load_knowledge()
-        self.texts = [t["text"] for t in self.tcodes]
 
-        # Build embeddings
-        self.embeddings = self.model.encode(self.texts, convert_to_numpy=True)
+# =========================================================
+# Status Check (used by /health)
+# =========================================================
+def is_ready() -> bool:
+    return _ready
 
-        # Normalize for cosine similarity
-        faiss.normalize_L2(self.embeddings)
 
-        # Create FAISS index
-        dim = self.embeddings.shape[1]
-        self.index = faiss.IndexFlatIP(dim)
-        self.index.add(self.embeddings)
+# =========================================================
+# Lazy Initialization (called from main.py startup thread)
+# =========================================================
+def initialize_search():
+    """
+        global _index, _metadata, _ready, load_knowledge, embed_query
 
-        print(f"Semantic search initialized successfully: rows={len(self.tcodes)}, dim={dim}")
+    from app.services.knowledge_loader import load_knowledge
+    from app.services.embedding_service import embed_query
 
-    # --------------------------------------------------
-    # Main Search Function
-    # --------------------------------------------------
-    def search(self, query: str, top_k: int = 5) -> Dict:
+    """
+    global _index, _metadata, _ready
 
-        query_embedding = self.model.encode([query], convert_to_numpy=True)
-        faiss.normalize_L2(query_embedding)
+    if _ready:
+        print("Search already initialized — skipping")
+        return
 
-        scores, indices = self.index.search(query_embedding, top_k)
+    print("🔄 Initializing semantic search engine...")
+
+    try:
+        index, metadata = load_knowledge()
+
+        # Safety checks
+        if index is None or len(index) == 0:
+            raise Exception("Embeddings index empty")
+
+        # Normalize embeddings (cosine similarity safety)
+        norms = np.linalg.norm(index, axis=1, keepdims=True)
+        norms[norms == 0] = 1
+        index = index / norms
+
+        _index = index
+        _metadata = metadata
+        _ready = True
+
+        print(f"✅ Knowledge loaded successfully: {len(_metadata)} records")
+
+    except Exception as e:
+        print("❌ Failed to initialize search:", str(e))
+        _ready = False
+
+
+# =========================================================
+# MAIN SEARCH FUNCTION (FastAPI uses THIS name)
+# =========================================================
+def search(query: str, top_k: int = 5) -> List[Dict]:
+    """
+    Semantic SAP T-code search endpoint logic
+    This is what main.py imports
+    """
+
+    # ---------- Warmup handling ----------
+    if not _ready or _index is None:
+        return [{
+            "status": "warming_up",
+            "message": "AI is starting — try again in 5 seconds"
+        }]
+
+    if not query or not query.strip():
+        return [{
+            "status": "invalid_query",
+            "message": "Query cannot be empty"
+        }]
+
+    try:
+        # ---------- Embed user query ----------
+        q_emb = embed_query(query)
+
+        if q_emb is None or len(q_emb) == 0:
+            return [{
+                "status": "embedding_error",
+                "message": "Failed to embed query"
+            }]
+
+        # Normalize query vector
+        q_emb = q_emb / (np.linalg.norm(q_emb) + 1e-10)
+
+        # ---------- Cosine similarity ----------
+        scores = np.dot(_index, q_emb)
+
+        # ---------- Top matches ----------
+        top_indices = np.argsort(scores)[-top_k:][::-1]
 
         results = []
-        for score, idx in zip(scores[0], indices[0]):
-            item = self.tcodes[idx]
+        for idx in top_indices:
+            item = _metadata[idx]
+
             results.append({
-                "tcode": item["tcode"],
-                "description": item["description"],
-                "module": item["module"],
-                "score": float(score)
+                "tcode": item.get("tcode"),
+                "description": item.get("description"),
+                "score": round(float(scores[idx]), 4)
             })
 
-        best_score = results[0]["score"]
+        return results
 
-        # --------------------------------------------------
-        # Confidence Intelligence (the important logic)
-        # --------------------------------------------------
-
-        # HIGH CONFIDENCE → direct answer
-        if best_score >= HIGH_CONFIDENCE:
-            return {
-                "type": "direct",
-                "best_match": results[0],
-                "alternatives": results[1:3]
-            }
-
-        # MEDIUM CONFIDENCE → suggest + confirm
-        if best_score >= MEDIUM_CONFIDENCE:
-            return {
-                "type": "suggestion",
-                "message": f"I found a likely SAP transaction: {results[0]['tcode']} — {results[0]['description']}. Please confirm.",
-                "best_match": results[0],
-                "alternatives": results[1:4]
-            }
-
-        # LOW CONFIDENCE → clarification required
-        if best_score >= LOW_CONFIDENCE:
-            return {
-                "type": "clarification",
-                "message": "I need a bit more detail to identify the correct SAP transaction.",
-                "examples": [
-                    "create purchase requisition",
-                    "post vendor invoice",
-                    "display purchase order"
-                ],
-                "results": results
-            }
-
-        # VERY LOW CONFIDENCE → unrelated query
-        return {
-            "type": "no_match",
-            "message": "This doesn't appear to be an SAP transaction request. Please describe the SAP task you want to perform."
-        }
-
-
-# Singleton instance
-search_service = TCodeSearchService()
+    except Exception as e:
+        print("Search runtime error:", str(e))
+        return [{
+            "status": "error",
+            "message": f"Search failed: {str(e)}"
+        }]
