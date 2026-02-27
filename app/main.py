@@ -1,21 +1,21 @@
-import threading
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
+import threading
+import time
 
-# Import ONLY safe functions (no heavy imports at startup)
+# Import ONLY safe functions
 from app.services.search_service import (
     initialize_search,
     is_ready,
-    semantic_search
+    search
 )
 
-# =========================================================
-# FastAPI App
-# =========================================================
-app = FastAPI(title="SAP T-Code AI Assistant", version="1.0")
+app = FastAPI(title="SAP T-Code Semantic Search API")
 
 
-# Allow frontend / VAPI / browser calls
+# =========================================================
+# CORS (Voice agent + frontend safe)
+# =========================================================
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -26,89 +26,58 @@ app.add_middleware(
 
 
 # =========================================================
-# Background Initialization (NON-BLOCKING STARTUP)
+# Background Loader (Prevents Render timeout)
 # =========================================================
-def start_background_initialization():
-    print("🔄 Initializing semantic search engine... (defensive)")
+def background_loader():
+    print("🔄 Initializing semantic search engine...")
     try:
         initialize_search()
-        print("✅ Semantic search initialization finished")
+        print("✅ Semantic search ready")
     except Exception as e:
-        print(f"❌ Failed to initialize search: {e}")
+        print("❌ Failed to initialize search:", e)
 
 
 @app.on_event("startup")
 def startup_event():
-    thread = threading.Thread(target=start_background_initialization, daemon=True)
+    thread = threading.Thread(target=background_loader, daemon=True)
     thread.start()
     print("Started background thread to initialize semantic search.")
 
 
 # =========================================================
-# Root Endpoint (for Render + Demo)
+# Root (Render health ping)
 # =========================================================
 @app.get("/")
 def root():
-    return {
-        "service": "SAP T-Code AI Assistant",
-        "status": "running",
-        "semantic_search_ready": is_ready()
-    }
+    return {"service": "SAP TCode Assistant", "status": "running"}
 
 
 # =========================================================
-# Health Check Endpoint
+# Health Endpoint (IMPORTANT FOR VAPI + UI)
 # =========================================================
 @app.get("/health")
 def health():
     return {
-        "healthy": True,
-        "embeddings_loaded": is_ready()
+        "ready": is_ready(),
+        "message": "Embeddings loaded" if is_ready() else "Loading embeddings"
     }
 
 
 # =========================================================
-# T-Code Semantic Search Endpoint
+# Main Search Endpoint
 # =========================================================
 @app.get("/search-tcode")
-def search_tcode(q: str = Query(..., description="Describe SAP task")):
-    """
-    Example:
-    /search-tcode?q=create purchase order
-    """
+def search_tcode(q: str = Query(..., min_length=2)):
     if not is_ready():
         return {
-            "ready": False,
-            "message": "Semantic search still initializing. Try again in a few seconds."
+            "status": "loading",
+            "message": "Knowledge base is still initializing"
         }
 
-    try:
-        results = semantic_search(q)
+    results = search(q, top_k=5)
 
-        return {
-            "ready": True,
-            "query": q,
-            "results": results
-        }
-
-    except Exception as e:
-        return {
-            "ready": False,
-            "error": str(e)
-        }
-
-
-# =========================================================
-# Debug Retrieval Endpoint (for presentation demo)
-# Shows raw retrieval before LLM answer
-# =========================================================
-@app.get("/debug-search")
-def debug_search(q: str):
-    if not is_ready():
-        return {"status": "initializing"}
-
-    results = semantic_search(q)
     return {
+        "status": "ok",
         "query": q,
-        "retrieved_knowledge": results
+        "results": results
     }
