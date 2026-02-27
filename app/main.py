@@ -1,33 +1,25 @@
-# app/main.py
-import threading
-from typing import Any, Callable
-from fastapi import FastAPI, Query
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+import threading
 
-# safe imports that should exist in the defensive search_service
+# Import search service safely (supports different versions)
+try:
+    from app.services.search_service import search as run_search
+except:
+    try:
+        from app.services.search_service import semantic_search as run_search
+    except:
+        from app.services.search_service import query as run_search
+
 from app.services.search_service import initialize_search, is_ready
 
-# Try multiple possible names for the search function so main.py works with either version.
-search_fn: Callable[[str, int], Any] | None = None
-try:
-    # preferred name used in older lightweight versions
-    from app.services.search_service import search as _search
-    search_fn = _search
-except Exception:
-    try:
-        from app.services.search_service import search_tcode as _search
-        search_fn = _search
-    except Exception:
-        try:
-            from app.services.search_service import semantic_search as _search
-            search_fn = _search
-        except Exception:
-            # leave search_fn = None; endpoint will handle missing function gracefully
-            search_fn = None
+app = FastAPI(title="SAP T-Code Assistant API")
 
 
-app = FastAPI(title="SAP T-Code Semantic Search API (robust main)")
-
+# -------------------------------------------------------
+# Allow VAPI / Browser / Postman access
+# -------------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -37,78 +29,84 @@ app.add_middleware(
 )
 
 
-def background_loader():
-    print("🔄 Initializing semantic search engine (background thread)...")
-    try:
-        initialize_search()
-        print("✅ Background initialization complete")
-    except Exception as e:
-        print("❌ Background initialization failed:", e)
+# -------------------------------------------------------
+# Request Model
+# -------------------------------------------------------
+class SearchRequest(BaseModel):
+    query: str
 
 
+# -------------------------------------------------------
+# Background startup (loads embeddings)
+# -------------------------------------------------------
 @app.on_event("startup")
 def startup_event():
-    thread = threading.Thread(target=background_loader, daemon=True)
+    print("🚀 Starting SAP semantic engine in background...")
+
+    def background_load():
+        try:
+            initialize_search()
+            print("✅ Semantic search ready")
+        except Exception as e:
+            print("❌ Failed to initialize search:", e)
+
+    thread = threading.Thread(target=background_load, daemon=True)
     thread.start()
-    print("Started background thread to initialize semantic search.")
 
 
+# -------------------------------------------------------
+# Root endpoint (for browser test)
+# -------------------------------------------------------
 @app.get("/")
 def root():
     return {
-        "service": "SAP TCode Assistant",
+        "service": "SAP T-Code Assistant",
         "status": "running",
-        "semantic_search_ready": is_ready(),
-        "search_function_available": bool(search_fn)
+        "ready": is_ready()
     }
 
 
+# -------------------------------------------------------
+# Health endpoint (Render health check)
+# -------------------------------------------------------
 @app.get("/health")
 def health():
     return {
-        "ready": is_ready(),
-        "search_function_available": bool(search_fn),
-        "message": "embeddings_loaded" if is_ready() else "loading"
+        "status": "ok",
+        "semantic_ready": is_ready()
     }
 
 
-@app.get("/search-tcode")
-def search_tcode(q: str = Query(..., min_length=1), top_k: int = Query(5, ge=1, le=20)):
-    """
-    Main search endpoint.
-    - Calls whichever search function is available in search_service.
-    - Returns warmup/diagnostic payloads if the system isn't ready or search function missing.
-    Example:
-      /search-tcode?q=create+purchase+requisition&top_k=5
-    """
-    # sanity
-    if not search_fn:
-        return {
-            "status": "error",
-            "message": "No search function available in app.services.search_service. Expected one of: search, search_tcode, semantic_search"
-        }
+# -------------------------------------------------------
+# Main search endpoint (USED BY VOICE AGENT)
+# -------------------------------------------------------
+@app.post("/search-tcode")
+def search_tcode(req: SearchRequest):
 
     if not is_ready():
         return {
-            "status": "warming_up",
-            "message": "AI knowledge base loading — try again in a few seconds"
+            "success": False,
+            "message": "Semantic engine still loading. Try again in 10 seconds."
         }
 
     try:
-        # call signature may be search(query) or search(query, top_k)
-        try:
-            results = search_fn(q, top_k)
-        except TypeError:
-            results = search_fn(q)
+        results = run_search(req.query)
+
+        if not results:
+            return {
+                "success": True,
+                "confidence": 0,
+                "results": [],
+                "message": "No SAP transaction found"
+            }
 
         return {
-            "status": "ok",
-            "query": q,
+            "success": True,
             "results": results
         }
-    except Exception as exc:
-        # don't crash on a runtime error; return structured message for debugging
+
+    except Exception as e:
         return {
-            "status": "error",
-            "message": str(exc)
+            "success": False,
+            "error": str(e)
         }
