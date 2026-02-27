@@ -1,0 +1,6 @@
+tcode,module,description,steps,keywords
+ME51N,MM,Create Purchase Requisition,"1. Logistics → Materials Management\n2. Purchasing → Create PR (ME51N)\n3. Fill header and items",purchase requisition;pr;create
+ME21N,MM,Create Purchase Order,"1. Logistics → Materials Management\n2. Purchasing → Create PO (ME21N)\n3. Fill vendor and items",purchase order;po;create
+MIGO,MM,Goods Receipt / Goods Movement,"1. Logistics → Materials Management\n2. Inventory Management → MIGO\n3. Select movement type and post",goods receipt;gr;migo
+MIRO,MM,Enter Incoming Invoice,"1. Logistics → Materials Management\n2. Logistics Invoice Verification → MIRO\n3. Enter invoice and post",invoice;miro;vendor invoice
+FB60,FI,Enter Vendor Invoice (FI),"1. Accounting → Financial Accounting → Accounts Payable → Document Entry → FB60\n2. Enter vendor invoice and post",vendor invoice;fb60;fi
