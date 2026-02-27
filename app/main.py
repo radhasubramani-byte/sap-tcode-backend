@@ -33,7 +33,7 @@ def startup_event():
 # -------------------------------------------
 @app.get("/search")
 def search(q: str):
-    from app.services.search_service import search_tcode, is_ready
+    from app.services.search_service import search as search_tcode, is_ready
 
     if not is_ready():
         return JSONResponse({
