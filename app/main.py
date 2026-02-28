@@ -1,168 +1,184 @@
 # app/main.py
-"""
-Compatibility main that imports the search_service module (safe)
-and binds any available search function name. Normalizes outputs
-so callers get a single canonical JSON shape.
-"""
-
+from fastapi import FastAPI, Query
+from fastapi.responses import JSONResponse
+from typing import Any, Callable, Optional, Dict
 import importlib
 import threading
-from typing import Any, Callable, Dict, Optional
-from fastapi import FastAPI, Query, Body
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+import time
+import traceback
 
-# Import the module (do not import specific names that might not exist)
-svc_mod = importlib.import_module("app.services.search_service")
+app = FastAPI(title="SAP T-Code Assistant API", version="1.0.0")
 
-# optional functions
-initialize_search = getattr(svc_mod, "initialize_search", None)
-is_ready = getattr(svc_mod, "is_ready", lambda: False)
+# -----------------------------
+# Dynamic binding to search_service
+# -----------------------------
+search_module = None
+run_search: Optional[Callable[..., Any]] = None
+initialize_search_fn: Optional[Callable[[], Any]] = None
+is_ready_fn: Optional[Callable[[], bool]] = None
+SEARCH_FUNCTION_BOUND = "none"
 
-# Try to bind a search function from a list of common names
-_search_candidates = ["search", "search_tcode", "semantic_search", "query", "_search", "search_query"]
-search_fn = None
-_bound_name = None
-for name in _search_candidates:
-    candidate = getattr(svc_mod, name, None)
-    if callable(candidate):
-        search_fn = candidate
-        _bound_name = name
-        break
 
-app = FastAPI(title="SAP T-Code Assistant")
+def _bind_search_functions() -> None:
+    """
+    Dynamically import app.services.search_service and bind the first available
+    search function name to run_search, plus initialize_search/is_ready if present.
+    This avoids deploy breaks when function names change.
+    """
+    global search_module, run_search, initialize_search_fn, is_ready_fn, SEARCH_FUNCTION_BOUND
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-class SearchRequest(BaseModel):
-    query: str
-    top_k: Optional[int] = 5
-
-def _background_initialize():
-    print("🔄 Background initialization thread starting...")
     try:
-        if callable(initialize_search):
-            initialize_search()
-            print("✅ initialize_search() completed")
-        else:
-            print("⚠️ initialize_search() not found in search_service module")
-    except Exception as e:
-        print("❌ initialize_search() raised:", repr(e))
+        search_module = importlib.import_module("app.services.search_service")
+    except Exception:
+        search_module = None
+        run_search = None
+        initialize_search_fn = None
+        is_ready_fn = None
+        SEARCH_FUNCTION_BOUND = "import_failed"
+        print("❌ Failed to import app.services.search_service")
+        print(traceback.format_exc())
+        return
 
+    # Bind search function (try multiple names)
+    candidates = ["search_tcode", "search", "semantic_search", "query"]
+    run_search = None
+    SEARCH_FUNCTION_BOUND = "none"
+
+    for name in candidates:
+        fn = getattr(search_module, name, None)
+        if callable(fn):
+            run_search = fn
+            SEARCH_FUNCTION_BOUND = name
+            break
+
+    # Bind init + readiness if available
+    initialize_search_fn = getattr(search_module, "initialize_search", None)
+    if not callable(initialize_search_fn):
+        initialize_search_fn = None
+
+    is_ready_fn = getattr(search_module, "is_ready", None)
+    if not callable(is_ready_fn):
+        is_ready_fn = None
+
+    print(f"✅ Bound search function: {SEARCH_FUNCTION_BOUND}")
+    print(f"✅ initialize_search present: {bool(initialize_search_fn)}")
+    print(f"✅ is_ready present: {bool(is_ready_fn)}")
+
+
+def _background_init() -> None:
+    """
+    Run initialize_search() in a background thread so Render doesn't time out.
+    """
+    if not initialize_search_fn:
+        print("⚠️ initialize_search() not available — skipping background init.")
+        return
+
+    try:
+        print("🔄 Background initialization thread starting...")
+        initialize_search_fn()
+        print("✅ initialize_search() completed")
+    except Exception:
+        print("❌ initialize_search() crashed")
+        print(traceback.format_exc())
+
+
+# Bind immediately at import time (safe; no heavy loading should happen in search_service)
+_bind_search_functions()
+
+# Try to include voice webhook router IF present (optional)
+try:
+    voice_module = importlib.import_module("app.services.voice_webhook")
+    voice_router = getattr(voice_module, "router", None)
+    if voice_router is not None:
+        app.include_router(voice_router)
+        print("✅ voice_webhook router included")
+    else:
+        print("ℹ️ app.services.voice_webhook found but no router object")
+except Exception:
+    # Not an error if you haven't created voice_webhook.py yet
+    print("ℹ️ voice_webhook not included (file not present or import failed)")
+
+# Startup: kick off background init
 @app.on_event("startup")
-def startup_event():
-    t = threading.Thread(target=_background_initialize, daemon=True)
-    t.start()
-    print("Started background initialization thread (daemon)")
+def on_startup():
+    # Re-bind on startup too (helps if hot reload / partial deployments)
+    _bind_search_functions()
 
+    t = threading.Thread(target=_background_init, daemon=True)
+    t.start()
+    print("🧵 Started background initialization thread (daemon)")
+
+
+# -----------------------------
+# Routes
+# -----------------------------
 @app.get("/")
 def root():
     return {
-        "service": "SAP T-Code Assistant",
-        "status": "running",
-        "semantic_ready": is_ready() if callable(is_ready) else False,
-        "search_function_bound": _bound_name
+        "service": "sap-tcode-backend",
+        "status": "ok",
+        "endpoints": ["/health", "/search-tcode?q=...&top_k=5"],
     }
+
 
 @app.get("/health")
 def health():
+    ready = False
+    if is_ready_fn:
+        try:
+            ready = bool(is_ready_fn())
+        except Exception:
+            ready = False
+
     return {
-        "ready": is_ready() if callable(is_ready) else False,
-        "search_function_bound": _bound_name
+        "ready": ready,
+        "search_function_bound": SEARCH_FUNCTION_BOUND,
     }
 
-def _normalize_search_output(raw: Any) -> Dict:
-    """
-    Normalize raw search output (either list or dict) to canonical dict:
-    {
-      "status": "ok"|"warming_up"|"error",
-      "query": "...",
-      "results": [...],
-      "best_match": {...} or None,
-      "confidence": float or None,
-      "confidence_label": str or None
-    }
-    """
-    canonical = {
-        "status": "ok",
-        "query": None,
-        "results": [],
-        "best_match": None,
-        "confidence": None,
-        "confidence_label": None
-    }
-
-    if raw is None:
-        return canonical
-
-    # If service already returned a status-style dict, preserve it
-    if isinstance(raw, dict):
-        # If it contains a status like "warming_up" or "error", pass through
-        if raw.get("status") in ("warming_up", "invalid_query", "error"):
-            return raw
-        # If raw is rich response from build_response_with_confidence
-        if "results" in raw and isinstance(raw["results"], list):
-            canonical["results"] = raw["results"]
-            canonical["best_match"] = raw.get("best_match")
-            canonical["confidence"] = raw.get("confidence")
-            canonical["confidence_label"] = raw.get("confidence_label")
-            return canonical
-        # else if it's already a list placed inside another key - try to coerce
-        if "alternatives" in raw and isinstance(raw["alternatives"], list):
-            canonical["results"] = raw["alternatives"]
-            canonical["best_match"] = raw.get("best_match")
-            canonical["confidence"] = raw.get("confidence")
-            canonical["confidence_label"] = raw.get("confidence_label")
-            return canonical
-
-    # if raw is list-like (old format)
-    if isinstance(raw, (list, tuple)):
-        canonical["results"] = list(raw)
-        if len(canonical["results"]) > 0:
-            top = canonical["results"][0]
-            canonical["best_match"] = top
-            score = (top.get("score") if isinstance(top, dict) else None)
-            try:
-                sc = float(score) if score is not None else None
-                if sc is not None:
-                    canonical["confidence"] = round(sc, 3)
-                    if sc >= 0.70:
-                        canonical["confidence_label"] = "high"
-                    elif sc >= 0.40:
-                        canonical["confidence_label"] = "medium"
-                    else:
-                        canonical["confidence_label"] = "low"
-            except Exception:
-                pass
-    return canonical
-
-def _call_search(q: str, top_k: int = 5):
-    if not search_fn:
-        raise RuntimeError("No search function bound in search_service module. Expected one of: " + ", ".join(_search_candidates))
-    # try (query, top_k) signature, then (query) fallback
-    try:
-        return search_fn(q, top_k)
-    except TypeError:
-        return search_fn(q)
 
 @app.get("/search-tcode")
-def search_get(q: str = Query(..., min_length=1), top_k: int = Query(5, ge=1, le=50)):
-    if not callable(is_ready) or not is_ready():
-        return {"status": "warming_up", "message": "Semantic engine initializing"}
-    try:
-        raw = _call_search(q, top_k)
-        canonical = _normalize_search_output(raw)
-        canonical["query"] = q
-        return canonical
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
+def search_tcode(
+    q: str = Query(..., min_length=1, description="Natural language query"),
+    top_k: int = Query(5, ge=1, le=10, description="Number of results"),
+):
+    """
+    Canonical endpoint for your voice agent + UI.
+    Calls the dynamically-bound search function from search_service.py.
+    """
+    if run_search is None:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": "Search function is not available (binding failed).",
+                "search_function_bound": SEARCH_FUNCTION_BOUND,
+            },
+        )
 
-@app.post("/search-tcode")
-def search_post(body: SearchRequest = Body(...)):
-    return search_get(q=body.query, top_k=body.top_k or 5)
+    try:
+        # Try calling with (query, top_k) first
+        try:
+            result = run_search(q, top_k=top_k)  # preferred signature
+        except TypeError:
+            # Fallback for older signature variants
+            result = run_search(q, top_k)
+
+        # If your search_service already returns canonical JSON, pass it through.
+        # Otherwise, wrap list outputs cleanly.
+        if isinstance(result, dict):
+            return result
+        return {
+            "status": "ok",
+            "query": q,
+            "results": result,
+        }
+    except Exception as e:
+        print("❌ /search-tcode runtime error:", str(e))
+        print(traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": f"Search failed: {str(e)}",
+            },
+        )
