@@ -1,179 +1,272 @@
 # app/services/search_service.py
 """
-Lightweight, defensive semantic search service for SAP T-codes.
+Production-safe semantic search service for SAP T-codes.
 
-- Uses embed_query() and load_knowledge() when available.
-- Defensive imports and clear error logging so it will not crash Render.
-- Exports:
-    initialize_search()  # run in background on startup
-    is_ready()
-    search_tcode(query, top_k)
-    _get_index_meta()    # debug support
+Exposes:
+- initialize_search()  -> lazy initialization (call on startup in background)
+- is_ready()           -> bool (if embeddings/index ready)
+- search_tcode(query, top_k=5) -> returns a dict with confidence and results
+- (also provides `search` as alias for compatibility)
 """
 
-from typing import List, Dict, Optional, Any
+import os
 import threading
-import traceback
-import time
+from typing import List, Dict, Optional, Tuple
 import numpy as np
 
-# runtime globals
-_index: Optional[np.ndarray] = None
-_metadata: Optional[List[Dict]] = None
+# Try to import loader & embedder. These modules should exist in your repo.
+# If they do not, we'll keep placeholders and fail gracefully.
+try:
+    from app.services.knowledge_loader import load_knowledge
+except Exception:
+    load_knowledge = None
+
+try:
+    from app.services.embedding_service import embed_query
+except Exception:
+    embed_query = None
+
+# -------------------------
+# Global runtime state
+# -------------------------
+_index: Optional[np.ndarray] = None     # normalized embeddings (N x D)
+_metadata: Optional[List[Dict]] = None  # list of records (dict)
 _ready: bool = False
-_lock = threading.Lock()
-_last_init_error: Optional[str] = None
-_last_init_time: Optional[float] = None
+_index_lock = threading.Lock()
 
+# Cache path (where we write/read embeddings)
+_EMBED_PATH = "/app/data/embeddings.npy" if os.path.isdir("/app/data") else "data/embeddings.npy"
 
+# -------------------------
+# Utilities
+# -------------------------
 def is_ready() -> bool:
-    return bool(_ready)
+    """Returns whether the semantic index is ready."""
+    return _ready
 
+def _normalize_embeddings(mat: np.ndarray) -> np.ndarray:
+    """L2-normalize along rows (embedding vectors)."""
+    norms = np.linalg.norm(mat, axis=1, keepdims=True)
+    norms[norms == 0] = 1.0
+    return mat / norms
 
-def _get_index_meta() -> Dict[str, Any]:
+def _safe_load_embeddings() -> Optional[np.ndarray]:
+    """Attempt to load embeddings cache from disk."""
     try:
-        rows = int(_index.shape[0]) if _index is not None else 0
-        dim = int(_index.shape[1]) if _index is not None else 0
-        meta_len = len(_metadata) if _metadata else 0
-        return {"rows": rows, "dim": dim, "metadata_len": meta_len, "ready": _ready, "last_error": _last_init_error}
+        if os.path.exists(_EMBED_PATH):
+            arr = np.load(_EMBED_PATH)
+            if arr is not None and len(arr) > 0:
+                return arr
     except Exception:
-        return {"rows": 0, "dim": 0, "metadata_len": 0, "ready": _ready, "last_error": _last_init_error}
+        pass
+    return None
 
+def _safe_save_embeddings(arr: np.ndarray) -> None:
+    try:
+        os.makedirs(os.path.dirname(_EMBED_PATH), exist_ok=True)
+        np.save(_EMBED_PATH, arr)
+    except Exception:
+        pass
 
-def initialize_search() -> None:
+# -------------------------
+# Knowledge initialization
+# -------------------------
+def initialize_search():
     """
-    Safe initialization: attempts to import loader + embedder and build normalized index.
-    If anything is missing or fails, it records the error and leaves _ready = False.
+    Load knowledge and embeddings lazily (safe to call multiple times).
+    Intended to be launched in a background thread at startup (not at import time).
     """
-    global _index, _metadata, _ready, _last_init_error, _last_init_time
+    global _index, _metadata, _ready
 
-    with _lock:
+    with _index_lock:
         if _ready:
             print("Search already initialized — skipping")
             return
 
-        _last_init_time = time.time()
         print("🔄 Initializing semantic search engine... (defensive)")
-
         try:
-            # dynamic imports to surface import problems here
-            from app.services.knowledge_loader import load_knowledge
-            from app.services.embedding_service import embed_query
-        except Exception as imp_exc:
-            _last_init_error = f"Import failure: {imp_exc}"
-            print("❌ Failed to initialize search - import error:", _last_init_error)
-            traceback.print_exc()
-            _ready = False
-            return
+            if not callable(load_knowledge):
+                raise RuntimeError("load_knowledge() not found")
 
-        if not callable(load_knowledge):
-            _last_init_error = "load_knowledge is not callable or missing"
-            print("❌", _last_init_error)
-            _ready = False
-            return
-
-        if not callable(embed_query):
-            _last_init_error = "embed_query is not callable or missing"
-            print("❌", _last_init_error)
-            _ready = False
-            return
-
-        try:
+            # load_knowledge returns (index_raw, metadata) OR (metadata only) depending on implementation
             loaded = load_knowledge()
-            if not isinstance(loaded, tuple) or len(loaded) < 2:
-                raise RuntimeError("load_knowledge must return (embeddings, metadata)")
+            # Support both return shapes:
+            # - (np.ndarray, metadata_list)
+            # - metadata_list (and create embeddings at runtime)
+            index_raw = None
+            metadata = None
 
-            index_raw, metadata = loaded[0], loaded[1]
+            if isinstance(loaded, tuple) and len(loaded) == 2:
+                index_raw, metadata = loaded
+            elif isinstance(loaded, list):
+                metadata = loaded
+            else:
+                # unexpected return — try to be flexible
+                if loaded is None:
+                    metadata = []
+                else:
+                    # last resort
+                    metadata = loaded if isinstance(loaded, list) else []
 
-            if index_raw is None:
-                raise RuntimeError("Embeddings index is None")
+            # If index raw available, normalize and set
+            if index_raw is not None and isinstance(index_raw, np.ndarray) and index_raw.size > 0:
+                index_raw = _normalize_embeddings(index_raw)
+                _index = index_raw
+            else:
+                # Try to read precomputed embeddings from disk
+                arr = _safe_load_embeddings()
+                if arr is not None:
+                    _index = _normalize_embeddings(arr)
+                else:
+                    # We'll generate embeddings at runtime below (requires embed_query)
+                    _index = None
 
-            index_arr = np.array(index_raw, dtype=np.float32)
-            if index_arr.ndim != 2:
-                raise RuntimeError(f"Embeddings must be 2-D, got {index_arr.shape}")
-
-            # normalize
-            norms = np.linalg.norm(index_arr, axis=1, keepdims=True)
-            norms[norms == 0] = 1.0
-            index_norm = index_arr / norms
-
-            _index = index_norm
             _metadata = metadata or []
-            _ready = True
-            _last_init_error = None
-            print(f"✅ Semantic search initialized: rows={_index.shape[0]}, dim={_index.shape[1]}")
 
-        except Exception as exc:
-            _last_init_error = f"runtime failure: {exc}"
+            # If we don't have embeddings but there is metadata and embed_query exists, build now
+            if _index is None and _metadata and callable(embed_query):
+                # Build embeddings for all metadata rows by composing the text we want to embed
+                texts = []
+                for row in _metadata:
+                    # prefer explicit 'text' if provided, else description + module fallback
+                    text = row.get("text") or f"{row.get('description','')} {row.get('module','')}"
+                    texts.append(text)
+
+                # Batch embed: embed_query should accept list OR single item depending on impl.
+                # Try to handle both cases defensively.
+                try:
+                    # some embed_query implementations take a list and return numpy array
+                    emb_arr = embed_query(texts)  # type: ignore
+                except TypeError:
+                    # fallback: embed one-by-one and stack
+                    embs = []
+                    for t in texts:
+                        e = embed_query(t)
+                        embs.append(np.array(e))
+                    emb_arr = np.vstack(embs)
+
+                # normalize + save
+                emb_arr = np.array(emb_arr, dtype=np.float32)
+                emb_arr = _normalize_embeddings(emb_arr)
+                _index = emb_arr
+                # Save cache for future startup speed
+                _safe_save_embeddings(emb_arr)
+                print(f"💾 Saved embeddings cache to {_EMBED_PATH}")
+
+            # Final safety checks
+            if _index is None or len(_index) == 0:
+                print("⚠️ No embeddings available yet — search will warm up and generate embeddings on demand (if possible)")
+                _ready = False
+            else:
+                _ready = True
+                print(f"✅ Semantic search initialized: rows={len(_metadata)}, dim={_index.shape[1] if _index is not None else 'NA'}")
+
+        except Exception as e:
+            print("❌ Failed to initialize search:", repr(e))
             _ready = False
-            print("❌ Failed to initialize search:", _last_init_error)
-            traceback.print_exc()
-            return
 
-
-def _normalize_query(q_emb: np.ndarray) -> np.ndarray:
-    v = q_emb.astype(np.float32).reshape(-1)
-    n = np.linalg.norm(v)
-    if n == 0:
-        return v
-    return v / (n + 1e-10)
-
-
-def _scores_to_results(scores: np.ndarray, top_idx: List[int]) -> List[Dict]:
-    res = []
-    for i in top_idx:
-        item = _metadata[i] if _metadata and i < len(_metadata) else {}
-        res.append({
-            "tcode": item.get("tcode"),
-            "description": item.get("description"),
-            "module": item.get("module"),
-            "score": float(scores[i])
-        })
-    return res
-
-
-def search_tcode(query: str, top_k: int = 5) -> Any:
+# -------------------------
+# Response builder (confidence intelligence)
+# -------------------------
+def build_response_with_confidence(results: List[Dict]) -> Dict:
     """
-    Defensive search endpoint: returns warming_up or error dicts if initialization failed.
+    Input:
+        results: list of dicts already sorted in descending score order
+    Returns:
+        dict: {
+            "type": "confident"|"uncertain"|"none",
+            "best_match": {...} or None,
+            "alternatives": [...],
+            "results": [...],
+            "confidence": float (0..1),
+            "confidence_label": "high"|"medium"|"low"
+        }
     """
+    if not results:
+        return {"type": "none", "best_match": None, "alternatives": [], "results": [], "confidence": 0.0, "confidence_label": "low"}
+
+    best = results[0]
+    try:
+        max_score = float(best.get("score", 0.0))
+    except Exception:
+        max_score = 0.0
+
+    if max_score >= 0.70:
+        label = "high"
+    elif max_score >= 0.40:
+        label = "medium"
+    else:
+        label = "low"
+
+    return {
+        "type": "confident" if max_score >= 0.40 else "uncertain",
+        "best_match": best,
+        "alternatives": results[1:],
+        "results": results,
+        "confidence": round(max_score, 3),
+        "confidence_label": label
+    }
+
+# -------------------------
+# Main search function (public)
+# -------------------------
+def _cosine_search(q_emb: np.ndarray, top_k: int = 5) -> List[Tuple[int, float]]:
+    """Return list of (index, score) sorted desc by score."""
+    global _index
+    if _index is None or _index.size == 0:
+        return []
+    # ensure q_emb normalized
+    q_emb = np.array(q_emb, dtype=np.float32)
+    denom = np.linalg.norm(q_emb) + 1e-10
+    qv = q_emb / denom
+    scores = np.dot(_index, qv)
+    top_indices = np.argsort(scores)[-top_k:][::-1]
+    return [(int(i), float(scores[i])) for i in top_indices]
+
+def search_tcode(query: str, top_k: int = 5) -> Dict:
+    """
+    Public search function expected by main.py.
+    Returns a rich dict (see build_response_with_confidence).
+    If the engine isn't ready it returns warming_up message as a dict.
+    """
+    global _index, _metadata, _ready
+
+    # Warmup handling
     if not _ready or _index is None:
-        return {"status": "warming_up", "message": "AI knowledge base not ready", "last_error": _last_init_error}
+        return {"status": "warming_up", "message": "AI knowledge base loading (~first deploy may take longer)"}
 
     if not query or not query.strip():
-        return {"status": "invalid_query", "message": "Empty query"}
+        return {"status": "invalid_query", "message": "Query cannot be empty"}
+
+    # Embed query (defensive)
+    if not callable(embed_query):
+        return {"status": "error", "message": "Embedding service unavailable"}
+
+    q_emb = embed_query(query)
+    if q_emb is None:
+        return {"status": "embedding_error", "message": "Failed to embed query"}
 
     try:
-        from app.services.embedding_service import embed_query
+        matches = _cosine_search(q_emb, top_k=top_k)
+        results = []
+        for idx, score in matches:
+            item = _metadata[idx] if (_metadata and idx < len(_metadata)) else {}
+            results.append({
+                "tcode": item.get("tcode") if isinstance(item, dict) else None,
+                "description": item.get("description") if isinstance(item, dict) else None,
+                "module": item.get("module") if isinstance(item, dict) else None,
+                "score": round(float(score), 6)
+            })
+        # Build rich response with confidence intelligence
+        response = build_response_with_confidence(results)
+        return response
     except Exception as e:
-        return {"status": "embedding_missing", "message": str(e)}
+        print("Search runtime error:", repr(e))
+        return {"status": "error", "message": f"Search failed: {str(e)}"}
 
-    try:
-        q_emb = embed_query(query)
-        if q_emb is None:
-            return {"status": "embedding_error"}
+# Provide aliases for compatibility (main will look for several names)
+def search(query: str, top_k: int = 5) -> Dict:
+    return search_tcode(query, top_k=top_k)
 
-        q_arr = np.array(q_emb, dtype=np.float32)
-        if q_arr.ndim > 1:
-            q_arr = q_arr.reshape(-1)
-        if q_arr.shape[0] != _index.shape[1]:
-            return {"status": "shape_mismatch", "message": "Embedding dim mismatch"}
-
-        q_vec = _normalize_query(q_arr)
-        scores = np.dot(_index, q_vec).astype(np.float32)
-
-        top_k = max(1, min(int(top_k), len(scores)))
-        top_idx = np.argsort(scores)[-top_k:][::-1]
-        results = _scores_to_results(scores, top_idx.tolist())
-
-        top_score = results[0]["score"] if results else 0.0
-        if top_score >= 0.75:
-            return {"type": "confident", "best_match": results[0], "alternatives": results[1:3], "results": results}
-        elif top_score >= 0.55:
-            return {"type": "suggestion", "options": results[:3], "results": results}
-        else:
-            return {"type": "clarification", "message": "Need more detail", "results": results}
-
-    except Exception as exc:
-        print("Search runtime error:", str(exc))
-        traceback.print_exc()
-        return {"status": "error", "message": str(exc)}
+# Exported API: initialize_search, is_ready, search_tcode, search
+__all__ = ["initialize_search", "is_ready", "search_tcode", "search"]
