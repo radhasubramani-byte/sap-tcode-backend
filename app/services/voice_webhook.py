@@ -1,202 +1,217 @@
-# app/services/voice_webhook.py
+# app/voice_webhook.py
 import os
-import re
-import threading
 import logging
-from typing import Optional, Dict, Any
+from typing import Dict, Any, Optional
 from fastapi import APIRouter, Request, Header, HTTPException
-from fastapi.responses import JSONResponse
+import httpx
+import asyncio
 
-# Try to import the search service module and bind available search function
-import importlib
-
-_log = logging.getLogger("voice_webhook")
-_log.setLevel(logging.INFO)
-
+logger = logging.getLogger("voice_webhook")
 router = APIRouter()
 
-# simple in-memory pending actions per session (session_id -> action dict)
-_pending_lock = threading.Lock()
-_pending_actions: Dict[str, Dict[str, Any]] = {}
+# Environment-configurable fallback search URL if internal import isn't available
+LOCAL_SEARCH_FALLBACK_URL = os.getenv("LOCAL_SEARCH_FALLBACK_URL", "http://127.0.0.1:10000/search-tcode")
+# The environment variable you should set in Render for webhook verification
+WEBHOOK_SECRET_ENV = os.getenv("WEBHOOK_SECRET", None)
 
-# load search_service module and bind candidate names
-svc_mod = importlib.import_module("app.services.search_service")
-_search_candidates = ["search_tcode", "search", "semantic_search", "query", "_search"]
-search_fn = None
-for name in _search_candidates:
-    fn = getattr(svc_mod, name, None)
-    if callable(fn):
-        search_fn = fn
-        _bound_name = name
-        break
-else:
-    _bound_name = None
-
-# optional secret: set WEBHOOK_SECRET in Render env and configure VAPI to send Authorization: Bearer <secret>
-WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")
+# Try to import the internal search function if available. We support multiple names for robustness.
+_search_fn = None
+try:
+    from app.services import search_service  # type: ignore
+    # prefer canonical names if available
+    for name in ("search_tcode", "search", "semantic_search", "query"):
+        _search_fn = getattr(search_service, name, None)
+        if callable(_search_fn):
+            logger.info("voice_webhook: bound internal search function: %s", name)
+            break
+except Exception:
+    _search_fn = None
 
 
-def _verify_secret(auth_header: Optional[str]):
-    if not WEBHOOK_SECRET:
-        return True
-    if not auth_header:
-        return False
-    # support "Bearer <token>"
-    m = re.match(r"Bearer\s+(.+)", auth_header or "", flags=re.I)
-    if not m:
-        return False
-    token = m.group(1).strip()
-    return token == WEBHOOK_SECRET
-
-
-def _is_affirmative(text: str) -> bool:
-    t = (text or "").strip().lower()
-    return bool(re.match(r"^(yes|yeah|yup|sure|please do|confirm|go ahead|do it|ok|okay)\b", t))
-
-
-def _is_negative(text: str) -> bool:
-    t = (text or "").strip().lower()
-    return bool(re.match(r"^(no|nope|nah|don't|do not|stop|cancel)\b", t))
-
-
-def _format_ssml(speech: str) -> str:
-    # small convenience: wrap in speak tag
-    return f"<speak>{speech}</speak>"
-
-
-def _choose_reply_from_search(search_json: Dict[str, Any]) -> (str, Dict[str, Any]):
+def verify_webhook_secret(header_secret: Optional[str], authorization: Optional[str]) -> bool:
     """
-    Return (speech_text, action)
-    action is a dict containing: tcode (or None), confidence (0..1), level ("high"/"medium"/"low")
+    Accept either:
+      - X-Webhook-Secret: <token>
+      - Authorization: Bearer <token>
+    The token must match WEBHOOK_SECRET env var if set. If WEBHOOK_SECRET isn't set, allow (but log).
     """
-    if not search_json:
-        return ("I couldn't reach the SAP search service. Please try again shortly.", {"tcode": None, "confidence": 0.0, "level": "low"})
-
-    # pass through "warming_up" and error states
-    if isinstance(search_json, dict) and search_json.get("status") in ("warming_up", "invalid_query", "error"):
-        if search_json.get("status") == "warming_up":
-            return ("The SAP assistant is still starting up — I can try again in a few seconds.", {"tcode": None, "confidence": 0.0, "level": "low"})
-        return (search_json.get("message", "An error occurred"), {"tcode": None, "confidence": 0.0, "level": "low"})
-
-    # Expected canonical response:
-    # { "status":"ok", "results":[...], "best_match": {...}, "confidence":0.80, "confidence_label":"high" }
-    conf = float(search_json.get("confidence") or 0.0)
-    conf_label = (search_json.get("confidence_label") or "").lower()
-    best = search_json.get("best_match") or {}
-    tcode = best.get("tcode")
-    desc = best.get("description") or ""
-
-    # High confidence -> assertive, offer action
-    if conf >= 0.75 or conf_label == "high":
-        speech = f"I'm confident this is {tcode} — {desc}. Would you like me to open that transaction or walk you through the steps?"
-        action = {"tcode": tcode, "confidence": conf, "level": "high"}
-        return speech, action
-
-    # Medium confidence -> provide alternative and ask for clarification
-    if 0.40 <= conf < 0.75 or conf_label == "medium":
-        # try to pick one alternative
-        alternatives = search_json.get("results", [])
-        alt = alternatives[1] if len(alternatives) > 1 else None
-        if alt:
-            alt_t = alt.get("tcode"); alt_d = alt.get("description", "")
-            speech = (f"I think it's {tcode} — {desc}, but a close alternative is {alt_t} — {alt_d}. "
-                      "Which one did you mean, the first or the alternative?")
+    configured = WEBHOOK_SECRET_ENV
+    token = None
+    if header_secret:
+        token = header_secret.strip()
+    elif authorization:
+        # header like 'Bearer <token>'
+        if authorization.lower().startswith("bearer "):
+            token = authorization.split(" ", 1)[1].strip()
         else:
-            speech = f"I believe it's {tcode} — {desc}. Do you want me to proceed with that?"
-        action = {"tcode": tcode, "confidence": conf, "level": "medium"}
-        return speech, action
+            token = authorization.strip()
 
-    # Low confidence -> ask clarifying question with examples
-    examples = ["create purchase requisition", "post vendor invoice", "display purchase order"]
-    examples_text = "; ".join(examples[:3])
-    speech = ("I need a bit more detail to identify the correct SAP transaction. "
-              f"For example, you can say: {examples_text}. What would you like to do?")
-    action = {"tcode": None, "confidence": conf, "level": "low"}
-    return speech, action
+    if configured:
+        ok = (token == configured)
+        if not ok:
+            logger.warning("voice_webhook: invalid webhook secret provided")
+        return ok
+    else:
+        # no secret configured — allow but warn
+        logger.warning("voice_webhook: WEBHOOK_SECRET not set in env; accepting request without verification")
+        return True
+
+
+async def call_local_search_via_http(query: str, top_k: int = 5) -> Dict[str, Any]:
+    """Fallback: call local HTTP search endpoint (assumes JSON response)."""
+    payload = {"q": query, "top_k": top_k}
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            r = await client.get(LOCAL_SEARCH_FALLBACK_URL, params=payload)
+            r.raise_for_status()
+            return r.json()
+    except Exception as e:
+        logger.exception("voice_webhook: local HTTP search call failed: %s", e)
+        return {"status": "error", "error": str(e)}
+
+
+def map_confidence_label(score: float) -> str:
+    """
+    Returns confidence label based on score:
+      - high: >= 0.75
+      - medium: >= 0.4
+      - low: otherwise
+    """
+    if score >= 0.75:
+        return "high"
+    if score >= 0.4:
+        return "medium"
+    return "low"
+
+
+def build_speech_for_confidence(label: str, best_match: Dict[str, Any], alternatives: Optional[list]) -> str:
+    """
+    Generate natural spoken text that sounds like an 'AI consultant' responding differently
+    depending on confidence.
+    """
+    desc = best_match.get("description") or best_match.get("desc") or ""
+    tcode = best_match.get("tcode") or best_match.get("code") or ""
+    if label == "high":
+        return f"I'm pretty confident this is {tcode} — {desc}. Would you like me to open it or show the steps?"
+    if label == "medium":
+        alt_str = ""
+        if alternatives:
+            # give 1-2 short alternatives
+            picks = [a.get("tcode") for a in alternatives[:2] if a.get("tcode")]
+            if picks:
+                alt_str = " Alternatives could be " + ", ".join(picks) + "."
+        return f"I think the best match is {tcode} — {desc}.{alt_str} Do you mean this one?"
+    # low confidence
+    examples = "for example, 'create purchase requisition' or 'post vendor invoice'"
+    return f"I need a little more detail to be sure which transaction you mean ({examples}). Can you rephrase or give an example?"
+
+async def run_search_query(query: str, top_k: int = 5) -> Dict[str, Any]:
+    """
+    Unified call to your search: try internal function first, otherwise HTTP fallback.
+    Expected canonical response shape (best effort):
+      {
+        "status": "ok",
+        "query": "...",
+        "results": [...],
+        "best_match": {...}
+      }
+    If internal function returns a plain list or other format, this tries to normalise.
+    """
+    # 1) internal function
+    if callable(_search_fn):
+        try:
+            # support sync or async search function
+            result = _search_fn(query, top_k=top_k) if _search_fn.__code__.co_argcount >= 1 else _search_fn(query)
+            if asyncio.iscoroutine(result):
+                result = await result
+            # if search function already returns canonical dict, pass through; otherwise try to normalise:
+            if isinstance(result, dict):
+                return result
+            # if result is list of rows
+            if isinstance(result, (list, tuple)):
+                return {"status": "ok", "query": query, "results": result, "best_match": (result[0] if result else None)}
+            # fallthrough
+            return {"status": "ok", "query": query, "results": result, "best_match": None}
+        except Exception as e:
+            logger.exception("voice_webhook: internal search_fn failed: %s", e)
+            # fall back to HTTP
+    # 2) HTTP fallback
+    return await call_local_search_via_http(query, top_k=top_k)
 
 
 @router.post("/voice-webhook")
-async def voice_webhook(request: Request, authorization: Optional[str] = Header(None)):
+async def voice_webhook(request: Request, x_webhook_secret: Optional[str] = Header(None), authorization: Optional[str] = Header(None)):
     """
-    Expected JSON body:
-    {
-      "session_id": "<optional session id>",
-      "transcript": "user spoken text",
-      "last_action": { ... }   # optional, if VAPI keeps session client-side
-    }
+    POST /voice-webhook
+    Body JSON expected:
+      {
+        "session_id": "...",
+        "transcript": "user spoken text",
+        "metadata": { ... }   # optional
+      }
 
-    Response:
-    {
-      "speech": "text to say",
-      "ssml": "<speak>...</speak>",
-      "action": { "tcode": "...", "confidence":0.8, "level":"high" }
-    }
+    Returns:
+      {
+        "speech": "...",            # text to speak
+        "type": "answer"|"clarification",
+        "confidence": 0.82,
+        "confidence_label": "high",
+        "results": [...],           # original search results (optional)
+        "best_match": {...}         # the best result
+      }
     """
-    # auth check
-    if not _verify_secret(authorization):
-        raise HTTPException(status_code=401, detail="Unauthorized")
+    # verify secret
+    if not verify_webhook_secret(x_webhook_secret, authorization):
+        raise HTTPException(status_code=401, detail="Invalid webhook secret")
 
-    body = await request.json()
-    transcript = (body.get("transcript") or "").strip()
-    session_id = body.get("session_id")
-    client_last_action = body.get("last_action")  # optional
-
+    payload: Dict[str, Any] = await request.json()
+    session_id = payload.get("session_id")
+    transcript = (payload.get("transcript") or "").strip()
     if not transcript:
-        return JSONResponse({"speech": "I didn't catch that. Could you repeat?"})
+        raise HTTPException(status_code=400, detail="Missing transcript")
 
-    _log.info("voice-webhook received: session=%s transcript=%s", session_id, transcript[:120])
+    # perform search
+    search_resp = await run_search_query(transcript, top_k=5)
 
-    # If user replied with a simple yes/no and we have a pending action, handle it
-    if session_id:
-        with _pending_lock:
-            pending = _pending_actions.get(session_id)
-    else:
-        pending = None
+    # attempt to extract best_match + score
+    best = search_resp.get("best_match") or None
+    results = search_resp.get("results") or []
+    # many legacy responses put best match as results[0]
+    if not best and results:
+        best = results[0]
 
-    # if user confirms and pending exists
-    if pending and _is_affirmative(transcript):
-        tcode = pending.get("tcode")
-        _log.info("User confirmed pending action for session %s -> %s", session_id, tcode)
-        # clear pending action
-        if session_id:
-            with _pending_lock:
-                _pending_actions.pop(session_id, None)
-        # produce confirm speech (this is what agent will say next)
-        speech = f"Okay — opening {tcode} now and I will walk you through the top fields."
-        ssml = _format_ssml(speech)
-        return JSONResponse({"speech": speech, "ssml": ssml, "action": {"tcode": tcode, "confirmed": True}})
+    # try to find a numeric score on best
+    score = None
+    if isinstance(best, dict):
+        for k in ("score", "confidence", "sim"):
+            v = best.get(k)
+            if isinstance(v, (int, float)):
+                score = float(v)
+                break
+            # sometimes it's a string numeric
+            if isinstance(v, str):
+                try:
+                    score = float(v)
+                    break
+                except Exception:
+                    pass
 
-    # if user declines
-    if pending and _is_negative(transcript):
-        if session_id:
-            with _pending_lock:
-                _pending_actions.pop(session_id, None)
-        speech = "Okay, I won't proceed. How else can I help with SAP?"
-        return JSONResponse({"speech": speech, "ssml": _format_ssml(speech), "action": {"tcode": None, "confirmed": False}})
+    # default score if missing
+    if score is None:
+        # use a conservative default
+        score = 0.0
 
-    # Otherwise call the search service
-    if not search_fn:
-        _log.error("No search function bound in search_service module")
-        return JSONResponse({"speech": "The backend search service is not available right now."}, status_code=500)
+    conf_label = map_confidence_label(score)
+    speech = build_speech_for_confidence(conf_label, best or {}, results[1:] if len(results) > 1 else [])
 
-    # Call search function defensively. Support either (q, top_k) or (q) signature.
-    try:
-        try:
-            search_resp = search_fn(transcript, top_k=5)
-        except TypeError:
-            search_resp = search_fn(transcript)
-    except Exception as e:
-        _log.exception("Search function raised")
-        return JSONResponse({"speech": "Search failed; please try again."}, status_code=500)
+    response = {
+        "speech": speech,
+        "type": "answer" if conf_label in ("high", "medium") else "clarification",
+        "confidence": round(score, 3),
+        "confidence_label": conf_label,
+        "results": results,
+        "best_match": best,
+    }
 
-    # Build reply and action
-    speech_text, action = _choose_reply_from_search(search_resp)
-
-    # If the action level is medium/high, keep it as pending for confirmation
-    if session_id and action and action.get("tcode") and action.get("level") in ("medium", "high"):
-        with _pending_lock:
-            _pending_actions[session_id] = action
-
-    ssml = _format_ssml(speech_text)
-    _log.info("Responding speech (len=%d) session=%s", len(speech_text), session_id)
-    return JSONResponse({"speech": speech_text, "ssml": ssml, "action": action})
+    logger.info("voice_webhook: session=%s query=%s conf=%s label=%s", session_id, transcript, response["confidence"], conf_label)
+    return response
