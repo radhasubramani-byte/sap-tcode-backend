@@ -13,6 +13,9 @@ import os
 import threading
 from typing import List, Dict, Optional, Tuple
 import numpy as np
+import glob
+import csv
+import re
 
 # Try to import loader & embedder. These modules should exist in your repo.
 # If they do not, we'll keep placeholders and fail gracefully.
@@ -34,8 +37,13 @@ _metadata: Optional[List[Dict]] = None  # list of records (dict)
 _ready: bool = False
 _index_lock = threading.Lock()
 
+# Alias structures
+_alias_patterns: List[Dict] = []        # list of {"alias": "create po", "tcode":"ME21N", "canonical_desc":"Create Purchase Order", "source":"mm_aliases.csv"}
+_tcode_index_map: Dict[str, Dict] = {}  # tcode -> metadata dict for quick enrichment
+
 # Cache path (where we write/read embeddings)
 _EMBED_PATH = "/app/data/embeddings.npy" if os.path.isdir("/app/data") else "data/embeddings.npy"
+_DATA_DIR = "/app/data" if os.path.isdir("/app/data") else "data"
 
 # -------------------------
 # Utilities
@@ -69,6 +77,121 @@ def _safe_save_embeddings(arr: np.ndarray) -> None:
         pass
 
 # -------------------------
+# Alias loader / matcher
+# -------------------------
+def _normalize_text_for_match(s: str) -> str:
+    """Simple canonicalization for matching: lowercase, remove punctuation (keep spaces)."""
+    if s is None:
+        return ""
+    s = s.lower()
+    # replace non-alphanumeric with space
+    s = re.sub(r"[^a-z0-9\s]", " ", s)
+    # collapse spaces
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+def load_alias_patterns() -> None:
+    """
+    Load any *_aliases.csv files from the data directory.
+    Expected CSV format: alias,tcode,canonical_desc
+    Populates global _alias_patterns and prints what was loaded.
+    """
+    global _alias_patterns
+    _alias_patterns = []
+    if not os.path.isdir(_DATA_DIR):
+        # nothing to load
+        return
+
+    pattern = os.path.join(_DATA_DIR, "*_aliases.csv")
+    files = sorted(glob.glob(pattern))
+    for fpath in files:
+        fname = os.path.basename(fpath)
+        try:
+            with open(fpath, newline="", encoding="utf-8") as fh:
+                reader = csv.reader(fh)
+                # allow optional header
+                rows = list(reader)
+                start_idx = 0
+                if rows and len(rows[0]) >= 1 and any("alias" in c.lower() for c in rows[0]):
+                    start_idx = 1
+                count = 0
+                for row in rows[start_idx:]:
+                    if not row or len(row) < 2:
+                        continue
+                    alias = row[0].strip()
+                    tcode = row[1].strip() if len(row) > 1 else ""
+                    canonical = row[2].strip() if len(row) > 2 else ""
+                    if not alias:
+                        continue
+                    _alias_patterns.append({
+                        "alias": _normalize_text_for_match(alias),
+                        "raw_alias": alias,
+                        "tcode": tcode,
+                        "canonical_desc": canonical,
+                        "source": fname
+                    })
+                    count += 1
+            print(f"Loaded {count} aliases from {fname}")
+        except Exception as e:
+            print(f"Failed to load alias file {fname}: {repr(e)}")
+
+    if _alias_patterns:
+        # build an index by tcode if possible (done later in initialize_search)
+        print("Alias patterns initialized")
+    else:
+        print("No alias files found (no *_aliases.csv in data dir)")
+
+def _find_alias_matches(query: str) -> List[Dict]:
+    """
+    Return list of matches [{tcode, description, score_estimate, matched_alias, source}, ...]
+    We use simple word-boundary substring checks (case-insensitive).
+    """
+    global _alias_patterns
+    if not query or not _alias_patterns:
+        return []
+
+    q = _normalize_text_for_match(query)
+    matches = []
+    for entry in _alias_patterns:
+        alias = entry.get("alias", "")
+        if not alias:
+            continue
+        # exact equality
+        if q == alias:
+            matches.append({
+                "tcode": entry.get("tcode"),
+                "description": entry.get("canonical_desc") or entry.get("raw_alias"),
+                "matched_alias": entry.get("raw_alias"),
+                "source": entry.get("source"),
+                "score": 1.0
+            })
+            continue
+        # word-boundary search
+        # escape alias for regex
+        pattern = r"\b" + re.escape(alias) + r"\b"
+        if re.search(pattern, q):
+            matches.append({
+                "tcode": entry.get("tcode"),
+                "description": entry.get("canonical_desc") or entry.get("raw_alias"),
+                "matched_alias": entry.get("raw_alias"),
+                "source": entry.get("source"),
+                "score": 0.95
+            })
+            continue
+        # substring fallback (less preferred)
+        if alias in q:
+            matches.append({
+                "tcode": entry.get("tcode"),
+                "description": entry.get("canonical_desc") or entry.get("raw_alias"),
+                "matched_alias": entry.get("raw_alias"),
+                "source": entry.get("source"),
+                "score": 0.8
+            })
+    # sort by score desc
+    matches.sort(key=lambda x: x.get("score", 0.0), reverse=True)
+    return matches
+
+# -------------------------
 # Knowledge initialization
 # -------------------------
 def initialize_search():
@@ -76,7 +199,7 @@ def initialize_search():
     Load knowledge and embeddings lazily (safe to call multiple times).
     Intended to be launched in a background thread at startup (not at import time).
     """
-    global _index, _metadata, _ready
+    global _index, _metadata, _ready, _tcode_index_map
 
     with _index_lock:
         if _ready:
@@ -85,14 +208,15 @@ def initialize_search():
 
         print("🔄 Initializing semantic search engine... (defensive)")
         try:
+            # load aliases first (so alias-based answers are available even if embeddings not ready)
+            load_alias_patterns()
+
             if not callable(load_knowledge):
                 raise RuntimeError("load_knowledge() not found")
 
             # load_knowledge returns (index_raw, metadata) OR (metadata only) depending on implementation
             loaded = load_knowledge()
             # Support both return shapes:
-            # - (np.ndarray, metadata_list)
-            # - metadata_list (and create embeddings at runtime)
             index_raw = None
             metadata = None
 
@@ -101,11 +225,9 @@ def initialize_search():
             elif isinstance(loaded, list):
                 metadata = loaded
             else:
-                # unexpected return — try to be flexible
                 if loaded is None:
                     metadata = []
                 else:
-                    # last resort
                     metadata = loaded if isinstance(loaded, list) else []
 
             # If index raw available, normalize and set
@@ -123,38 +245,40 @@ def initialize_search():
 
             _metadata = metadata or []
 
+            # Build tcode index map for enrichment (useful for alias lookups)
+            _tcode_index_map = {}
+            for row in (_metadata or []):
+                if not isinstance(row, dict):
+                    continue
+                t = row.get("tcode")
+                if t:
+                    _tcode_index_map[str(t).upper()] = row
+
             # If we don't have embeddings but there is metadata and embed_query exists, build now
             if _index is None and _metadata and callable(embed_query):
                 # Build embeddings for all metadata rows by composing the text we want to embed
                 texts = []
                 for row in _metadata:
-                    # prefer explicit 'text' if provided, else description + module fallback
                     text = row.get("text") or f"{row.get('description','')} {row.get('module','')}"
                     texts.append(text)
 
-                # Batch embed: embed_query should accept list OR single item depending on impl.
-                # Try to handle both cases defensively.
                 try:
-                    # some embed_query implementations take a list and return numpy array
                     emb_arr = embed_query(texts)  # type: ignore
                 except TypeError:
-                    # fallback: embed one-by-one and stack
                     embs = []
                     for t in texts:
                         e = embed_query(t)
                         embs.append(np.array(e))
                     emb_arr = np.vstack(embs)
 
-                # normalize + save
                 emb_arr = np.array(emb_arr, dtype=np.float32)
                 emb_arr = _normalize_embeddings(emb_arr)
                 _index = emb_arr
-                # Save cache for future startup speed
                 _safe_save_embeddings(emb_arr)
                 print(f"💾 Saved embeddings cache to {_EMBED_PATH}")
 
             # Final safety checks
-            if _index is None or len(_index) == 0:
+            if _index is None or (isinstance(_index, np.ndarray) and len(_index) == 0):
                 print("⚠️ No embeddings available yet — search will warm up and generate embeddings on demand (if possible)")
                 _ready = False
             else:
@@ -229,14 +353,32 @@ def search_tcode(query: str, top_k: int = 5) -> Dict:
     Returns a rich dict (see build_response_with_confidence).
     If the engine isn't ready it returns warming_up message as a dict.
     """
-    global _index, _metadata, _ready
-
-    # Warmup handling
-    if not _ready or _index is None:
-        return {"status": "warming_up", "message": "AI knowledge base loading (~first deploy may take longer)"}
+    global _index, _metadata, _ready, _tcode_index_map
 
     if not query or not query.strip():
         return {"status": "invalid_query", "message": "Query cannot be empty"}
+
+    # Attempt alias match FIRST (works even if embeddings are not ready)
+    alias_matches = _find_alias_matches(query)
+    if alias_matches:
+        # Build results enriched with metadata when available
+        results = []
+        for m in alias_matches[:top_k]:
+            tcode = (m.get("tcode") or "").upper() if m.get("tcode") else None
+            meta = _tcode_index_map.get(tcode, {}) if tcode else {}
+            desc = meta.get("description") or m.get("description")
+            module = meta.get("module") or meta.get("module_name") or None
+            results.append({
+                "tcode": tcode,
+                "description": desc,
+                "module": module,
+                "score": round(float(m.get("score", 0.9)), 6)
+            })
+        return build_response_with_confidence(results)
+
+    # If engine not ready, return warming message (we already attempted alias)
+    if not _ready or _index is None:
+        return {"status": "warming_up", "message": "AI knowledge base loading (~first deploy may take longer)"}
 
     # Embed query (defensive)
     if not callable(embed_query):
