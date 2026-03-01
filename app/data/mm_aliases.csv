@@ -1,51 +1,50 @@
 alias,tcode,canonical_desc
-create po,ME21N,Create Purchase Order
-raise po,ME21N,Create Purchase Order
-purchase order,ME21N,Create Purchase Order
-new po,ME21N,Create Purchase Order
-change po,ME22N,Change Purchase Order
-modify po,ME22N,Change Purchase Order
-edit po,ME22N,Change Purchase Order
-display po,ME23N,Display Purchase Order
-view po,ME23N,Display Purchase Order
-check po,ME23N,Display Purchase Order
-create pr,ME51N,Create Purchase Requisition
-raise pr,ME51N,Create Purchase Requisition
-purchase requisition,ME51N,Create Purchase Requisition
-create purchase requisition,ME51N,Create Purchase Requisition
-make purchase requisition,ME51N,Create Purchase Requisition
-how to create purchase requisition,ME51N,Create Purchase Requisition
-how do i create purchase requisition,ME51N,Create Purchase Requisition
-create pr in sap,ME51N,Create Purchase Requisition
-create pr,ME51N,Create Purchase Requisition
-new pr,ME51N,Create Purchase Requisition
-change pr,ME52N,Change Purchase Requisition
-modify pr,ME52N,Change Purchase Requisition
-display pr,ME53N,Display Purchase Requisition
-view pr,ME53N,Display Purchase Requisition
-create pir,ME11,Create Purchase Info Record
-purchase info record,ME11,Create Purchase Info Record
-create info record,ME11,Create Purchase Info Record
-change pir,ME12,Change Purchase Info Record
-maintain pir,ME12,Change Purchase Info Record
-display pir,ME13,Display Purchase Info Record
-create rfq,ME41,Create RFQ
-request for quotation,ME41,Create RFQ
-change rfq,ME42,Change RFQ
-display rfq,ME43,Display RFQ
-create source list,ME01,Maintain Source List
-maintain source list,ME01,Maintain Source List
-change source list,ME02,Change Source List
-display source list,ME03,Display Source List
-post goods receipt,MIGO,Goods Movement
-goods receipt,MIGO,Goods Movement
-post gr,MIGO,Goods Movement
-goods issue,MIGO,Goods Movement
-post gi,MIGO,Goods Movement
-material document,MIGO,Goods Movement
-check stock,MMBE,Stock Overview
-stock overview,MMBE,Stock Overview
-vendor master,XK01,Create Vendor
-create vendor,XK01,Create Vendor
-change vendor,XK02,Change Vendor
-display vendor,XK03,Display Vendor
+"create po",ME21N,"Create Purchase Order"
+"raise po",ME21N,"Create Purchase Order"
+"purchase order",ME21N,"Create Purchase Order"
+"new po",ME21N,"Create Purchase Order"
+"change po",ME22N,"Change Purchase Order"
+"modify po",ME22N,"Change Purchase Order"
+"edit po",ME22N,"Change Purchase Order"
+"display po",ME23N,"Display Purchase Order"
+"view po",ME23N,"Display Purchase Order"
+"check po",ME23N,"Display Purchase Order"
+"create pr",ME51N,"Create Purchase Requisition"
+"raise pr",ME51N,"Create Purchase Requisition"
+"purchase requisition",ME51N,"Create Purchase Requisition"
+"create purchase requisition",ME51N,"Create Purchase Requisition"
+"make purchase requisition",ME51N,"Create Purchase Requisition"
+"how to create purchase requisition",ME51N,"Create Purchase Requisition"
+"how do i create purchase requisition",ME51N,"Create Purchase Requisition"
+"create pr in sap",ME51N,"Create Purchase Requisition"
+"new pr",ME51N,"Create Purchase Requisition"
+"change pr",ME52N,"Change Purchase Requisition"
+"modify pr",ME52N,"Change Purchase Requisition"
+"display pr",ME53N,"Display Purchase Requisition"
+"view pr",ME53N,"Display Purchase Requisition"
+"create pir",ME11,"Create Purchase Info Record"
+"purchase info record",ME11,"Create Purchase Info Record"
+"create info record",ME11,"Create Purchase Info Record"
+"change pir",ME12,"Change Purchase Info Record"
+"maintain pir",ME12,"Change Purchase Info Record"
+"display pir",ME13,"Display Purchase Info Record"
+"create rfq",ME41,"Create RFQ"
+"request for quotation",ME41,"Create RFQ"
+"change rfq",ME42,"Change RFQ"
+"display rfq",ME43,"Display RFQ"
+"create source list",ME01,"Maintain Source List"
+"maintain source list",ME01,"Maintain Source List"
+"change source list",ME02,"Change Source List"
+"display source list",ME03,"Display Source List"
+"post goods receipt",MIGO,"Goods Movement"
+"goods receipt",MIGO,"Goods Movement"
+"post gr",MIGO,"Goods Movement"
+"goods issue",MIGO,"Goods Movement"
+"post gi",MIGO,"Goods Movement"
+"material document",MIGO,"Goods Movement"
+"check stock",MMBE,"Stock Overview"
+"stock overview",MMBE,"Stock Overview"
+"vendor master",XK01,"Create Vendor"
+"create vendor",XK01,"Create Vendor"
+"change vendor",XK02,"Change Vendor"
+"display vendor",XK03,"Display Vendor"
