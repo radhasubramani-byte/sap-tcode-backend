@@ -1,7 +1,6 @@
 alias,tcode,canonical_desc
 create po,ME21N,Create Purchase Order
 raise po,ME21N,Create Purchase Order
-make po,ME21N,Create Purchase Order
 purchase order,ME21N,Create Purchase Order
 new po,ME21N,Create Purchase Order
 change po,ME22N,Change Purchase Order
@@ -13,6 +12,12 @@ check po,ME23N,Display Purchase Order
 create pr,ME51N,Create Purchase Requisition
 raise pr,ME51N,Create Purchase Requisition
 purchase requisition,ME51N,Create Purchase Requisition
+create purchase requisition,ME51N,Create Purchase Requisition
+make purchase requisition,ME51N,Create Purchase Requisition
+how to create purchase requisition,ME51N,Create Purchase Requisition
+how do i create purchase requisition,ME51N,Create Purchase Requisition
+create pr in sap,ME51N,Create Purchase Requisition
+create pr,ME51N,Create Purchase Requisition
 new pr,ME51N,Create Purchase Requisition
 change pr,ME52N,Change Purchase Requisition
 modify pr,ME52N,Change Purchase Requisition
