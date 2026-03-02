@@ -2,3 +2,5 @@
 !tcodes.csv
 *.xlsx.env 
 ".env" 
+data/
+*.npy
