@@ -1,115 +1,100 @@
 # app/main.py
-from __future__ import annotations
-
 import os
 import threading
-import traceback
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+from typing import Any, Dict, Optional
 
-# --- Import voice webhook router (this is the one we updated) ---
-try:
-    from app.voice_webhook import router as voice_router
-except Exception as e:
-    voice_router = None
-    print("❌ Failed to import app.voice_webhook router:", repr(e))
-    traceback.print_exc()
+from fastapi import FastAPI, Query
+from fastapi.responses import JSONResponse
 
-# --- Import search service (semantic search init) ---
-try:
-    from app.services import search_service
-except Exception as e:
-    search_service = None
-    print("⚠️ Failed to import search_service:", repr(e))
+# Search service (semantic)
+from app.services.search_service import initialize_search, is_ready, search_tcode
 
-# --- (Optional) Import your other API router if you have one ---
-# If you don't have app/api.py, this won't break startup.
-try:
-    from app.api import router as api_router  # optional
-except Exception:
-    api_router = None
+app = FastAPI(title="SAP Tcode Backend", version="1.0.0")
 
-app = FastAPI(title="SAP T-Code Backend", version="1.0.0")
 
-# CORS (safe default; tighten later if needed)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# -----------------------
-# Routes
-# -----------------------
-@app.get("/")
-def root():
-    return {"status": "ok", "service": "sap-tcode-backend"}
-
-@app.get("/health")
-def health():
-    ready = False
-    try:
-        if search_service and hasattr(search_service, "is_ready"):
-            ready = bool(search_service.is_ready())
-    except Exception:
-        ready = False
-    return {"status": "ok", "search_ready": ready}
-
-# Mount voice webhook
-if voice_router is not None:
-    app.include_router(voice_router)
-    print("✅ Mounted voice webhook routes (e.g., POST /voice-webhook)")
-else:
-    print("❌ voice_router is None — /voice-webhook will NOT be available")
-
-# Mount optional API router (if exists)
-if api_router is not None:
-    app.include_router(api_router)
-    print("✅ Mounted API routes from app.api")
-else:
-    print("ℹ️ app.api router not found (skipping)")
-
-# -----------------------
-# Startup: initialize search in background
-# -----------------------
-def _init_search_background():
-    if not search_service:
-        print("⚠️ search_service unavailable — skipping initialize_search()")
-        return
-    if not hasattr(search_service, "initialize_search"):
-        print("⚠️ search_service.initialize_search not found — skipping")
-        return
-
-    try:
-        search_service.initialize_search()
-        print("✅ initialize_search() completed")
-    except Exception as e:
-        print("❌ initialize_search() failed:", repr(e))
-        traceback.print_exc()
-
+# ----------------------------
+# Startup: warm up search index
+# ----------------------------
 @app.on_event("startup")
-def on_startup():
-    # Helpful banner for Render logs
-    primary_url = os.environ.get("RENDER_EXTERNAL_URL") or os.environ.get("PRIMARY_URL") or ""
-    if primary_url:
-        print("==> " + "/" * 60)
-        print(f"==> Available at your primary URL {primary_url}")
-        print("==> " + "/" * 60)
+def _startup() -> None:
+    # Do NOT block startup; run embeddings/index build in background.
+    def _bg_init():
+        try:
+            initialize_search()
+        except Exception as e:
+            print("❌ initialize_search() failed:", repr(e))
 
-    # Render expects you to listen on PORT
-    port = os.environ.get("PORT", "10000")
-    print(f"==> Detected service running on port {port}")
-
-    # Kick off background init so first request doesn't block too long
-    t = threading.Thread(target=_init_search_background, daemon=True)
+    t = threading.Thread(target=_bg_init, daemon=True)
     t.start()
 
-    print("==> Your service is live 🎉")
+
+# ----------------------------
+# Basic routes
+# ----------------------------
+@app.get("/")
+def root() -> Dict[str, Any]:
+    return {
+        "status": "ok",
+        "service": "sap-tcode-backend",
+        "ready": bool(is_ready()),
+    }
 
 
-# NOTE:
-# You do NOT run uvicorn here in Render; Render runs it via your start command.
-# Typical Render start command:
-#   uvicorn app.main:app --host 0.0.0.0 --port $PORT
+@app.get("/health")
+def health() -> Dict[str, Any]:
+    return {"ok": True, "ready": bool(is_ready())}
+
+
+# ----------------------------
+# ✅ SEARCH ENDPOINT (fixes 404)
+# voice_webhook.py was calling /search-tcode?q=...&top_k=...
+# ----------------------------
+@app.get("/search-tcode")
+def search_tcode_endpoint(
+    q: str = Query(..., description="User query"),
+    top_k: int = Query(5, ge=1, le=20, description="Number of results"),
+) -> JSONResponse:
+    try:
+        resp = search_tcode(q, top_k=top_k)
+        return JSONResponse(content=resp)
+    except Exception as e:
+        print("❌ /search-tcode error:", repr(e))
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": "search failed"},
+        )
+
+
+# ----------------------------
+# Mount voice webhook routes (defensive)
+# Supports either:
+#   - voice_webhook.py defines `router` (FastAPI APIRouter)
+#   - voice_webhook.py defines `mount_*` or `register_*` function
+# ----------------------------
+def _mount_voice_routes() -> None:
+    try:
+        # Most common pattern: router = APIRouter()
+        from app.voice_webhook import router as voice_router  # type: ignore
+
+        app.include_router(voice_router)
+        print("✅ Mounted voice webhook routes (router)")
+        return
+    except Exception:
+        pass
+
+    # Alternate pattern: a function to mount routes
+    for fn_name in ("mount_voice_routes", "register_voice_routes", "register_voice_webhook_routes"):
+        try:
+            mod = __import__("app.voice_webhook", fromlist=[fn_name])
+            fn = getattr(mod, fn_name, None)
+            if callable(fn):
+                fn(app)
+                print(f"✅ Mounted voice webhook routes ({fn_name})")
+                return
+        except Exception:
+            continue
+
+    print("ℹ️ voice webhook module found but no router/mount function detected (skipping)")
+
+
+_mount_voice_routes()
