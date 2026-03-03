@@ -29,10 +29,62 @@ import pandas as pd
 
 from app.services.embedding_service import embed_query  # single-item embed function
 
-# Configuration
-DATA_DIR = os.environ.get("DATA_DIR", "/app/data")
-TCODES_FILE = os.environ.get("TCODES_FILE", os.path.join(DATA_DIR, "tcodes.csv"))
-EMBEDDINGS_FILE = os.path.join(DATA_DIR, "embeddings.npy")
+# Configuration (these may be overridden through environment)
+# If TCODES_FILE is set as an absolute path it is used verbatim.
+CONFIG_DATA_DIR = os.environ.get("DATA_DIR", "/app/data")
+CONFIG_TCODES_FILE = os.environ.get("TCODES_FILE", None)  # may be a full path or filename
+# We'll compute final paths below using discovery logic.
+
+# Candidate dirs to search (ordered): include the configured DATA_DIR, common Render layout,
+# repo-relative locations so the loader is robust to different repo layouts.
+_CANDIDATE_DATA_DIRS = [
+    CONFIG_DATA_DIR,
+    "/app/data",               # standard container path if repo root is mounted at /
+    "/app/app/data",           # some setups result in /app/<repo>/app/data
+    os.path.join(os.getcwd(), "app", "data"),
+    os.path.join(os.getcwd(), "data"),
+]
+
+
+def _find_existing_file(path_or_name: Optional[str]) -> Optional[str]:
+    """
+    Resolve a requested path or filename to an existing file path.
+
+    - If `path_or_name` is an absolute path and exists -> return it.
+    - If `path_or_name` is a relative path that exists -> return os.path.abspath(...)
+    - Otherwise if it's just a filename (no slash) or None, try candidate data dirs.
+    - Returns the first existing full path or None if not found.
+    """
+    # If explicit path provided, test it first
+    if path_or_name:
+        # expand env vars / user ~
+        candidate = os.path.expanduser(os.path.expandvars(path_or_name))
+        if os.path.isabs(candidate):
+            if os.path.exists(candidate):
+                return os.path.abspath(candidate)
+        else:
+            # try relative to cwd
+            rel = os.path.abspath(candidate)
+            if os.path.exists(rel):
+                return rel
+
+    # If no explicit path or not found, try the common candidate directories
+    # If path_or_name is provided but not found as a path, treat it as filename
+    filename = os.path.basename(path_or_name) if path_or_name else "tcodes.csv"
+
+    for d in _CANDIDATE_DATA_DIRS:
+        try:
+            if not d:
+                continue
+            p = os.path.join(d, filename)
+            if os.path.exists(p):
+                return os.path.abspath(p)
+        except Exception:
+            # ignore broken candidate dirs
+            continue
+
+    # Nothing found
+    return None
 
 
 def _safe_read_csv(path: str) -> Optional[pd.DataFrame]:
@@ -40,8 +92,11 @@ def _safe_read_csv(path: str) -> Optional[pd.DataFrame]:
     try:
         if not os.path.exists(path):
             print(f"Render path checked: {path}")
-            print(f"Make sure the file exists inside the {DATA_DIR} folder in your repo.")
+            print("Make sure the file exists inside one of these folders in your repo:")
+            for d in _CANDIDATE_DATA_DIRS:
+                print(f"  • {d}")
             return None
+        # use pandas read_csv with default options (files should be well-formed CSV)
         df = pd.read_csv(path)
         return df
     except Exception as exc:
@@ -58,7 +113,7 @@ def _build_texts(df: pd.DataFrame) -> List[str]:
     if "module" in df.columns:
         module = df["module"].astype(str).fillna("")
         # join in a natural way so embeddings capture module context
-        texts = (desc + " in SAP " + module).tolist()
+        texts = (desc + " in S-A-P " + module).tolist()
     else:
         texts = desc.tolist()
     return texts
@@ -67,7 +122,6 @@ def _build_texts(df: pd.DataFrame) -> List[str]:
 def load_knowledge() -> Tuple[Optional[np.ndarray], Optional[List[Dict]]]:
     """
     Load the tcode knowledge and return (embeddings_matrix, metadata_list).
-
     - If precomputed embeddings.npy exists and matches the CSV row count, load and return it.
     - Otherwise generate embeddings by calling embed_query(text) for each row,
       save embeddings.npy for future cold starts, and return the computed matrix.
@@ -75,11 +129,32 @@ def load_knowledge() -> Tuple[Optional[np.ndarray], Optional[List[Dict]]]:
     On any fatal error return (None, None) so caller can handle warming / retry logic.
     """
     try:
-        print(f"📂 Loading knowledge base from: {DATA_DIR}")
+        # discover tcodes file path
+        requested_tc_path = CONFIG_TCODES_FILE if CONFIG_TCODES_FILE else os.path.join(CONFIG_DATA_DIR, "tcodes.csv")
+        tcodes_fullpath = _find_existing_file(requested_tc_path)
+        # chosen_data_dir is based on discovered tcodes location (so embeddings cache sits beside it)
+        chosen_data_dir = None
+        if tcodes_fullpath:
+            chosen_data_dir = os.path.dirname(tcodes_fullpath)
+        else:
+            # fallback to first candidate dir (may not exist yet)
+            chosen_data_dir = _CANDIDATE_DATA_DIRS[0]
 
-        df = _safe_read_csv(TCODES_FILE)
+        embeddings_path = os.path.join(chosen_data_dir, "embeddings.npy")
+
+        print(f"📂 Loading knowledge base. Requested path: {requested_tc_path}")
+        if tcodes_fullpath:
+            print(f"✅ Found tcodes.csv at: {tcodes_fullpath}")
+        else:
+            print(f"❌ DATA FILE MISSING: {requested_tc_path}")
+            print("Searched these candidate locations:")
+            for d in _CANDIDATE_DATA_DIRS:
+                print(f"  • {d}")
+            return None, None
+
+        df = _safe_read_csv(tcodes_fullpath)
         if df is None:
-            print(f"❌ DATA FILE MISSING: {TCODES_FILE}")
+            print(f"❌ DATA FILE MISSING or unreadable: {tcodes_fullpath}")
             return None, None
 
         # Required column check
@@ -106,22 +181,22 @@ def load_knowledge() -> Tuple[Optional[np.ndarray], Optional[List[Dict]]]:
             )
 
         n_rows = len(metadata)
-        print(f"✅ Loaded {n_rows} tcodes")
+        print(f"✅ Loaded {n_rows} tcodes (metadata entries)")
 
-        # Try to load cached embeddings
-        if os.path.exists(EMBEDDINGS_FILE):
+        # Try to load cached embeddings next to tcodes.csv
+        if os.path.exists(embeddings_path):
             try:
-                arr = np.load(EMBEDDINGS_FILE)
+                arr = np.load(embeddings_path)
                 if arr is not None and getattr(arr, "shape", None) is not None and arr.shape[0] == n_rows:
-                    print("🔁 Found embeddings.npy and row count matches — using cached embeddings")
+                    print(f"🔁 Found embeddings.npy at {embeddings_path} and row count matches — using cached embeddings")
                     return arr.astype(np.float32), metadata
                 else:
-                    print("⚠️ embeddings.npy found but shape mismatch — regenerating embeddings")
+                    print(f"⚠️ embeddings.npy found at {embeddings_path} but shape mismatch — regenerating embeddings")
             except Exception as exc:
                 print("⚠️ Failed to load embeddings.npy, regenerating:", str(exc))
 
         # No cached embeddings — generate at runtime
-        print("⚠️ No embeddings.npy found — embeddings will be generated at runtime")
+        print("⚠️ No embeddings.npy found or invalid — embeddings will be generated at runtime")
         texts = _build_texts(df)
 
         embeddings_list: List[List[float]] = []
@@ -136,18 +211,17 @@ def load_knowledge() -> Tuple[Optional[np.ndarray], Optional[List[Dict]]]:
                 emb_arr = np.array(emb, dtype=np.float32).reshape(-1)
                 embeddings_list.append(emb_arr.tolist())
             except Exception as exc:
-                # Log the exact failing text to help debugging (do NOT print full secrets)
+                # Log the failing tcode to help debugging (do NOT print secrets)
                 print(f"❌ Failed to embed row {i} ({metadata[i].get('tcode')}): {exc}")
-                # Return failure so caller can handle warming_up or raise as needed
                 return None, None
 
         # Convert to numpy array
         embeddings_matrix = np.array(embeddings_list, dtype=np.float32)
         # Persist for faster cold starts next time (best-effort)
         try:
-            os.makedirs(DATA_DIR, exist_ok=True)
-            np.save(EMBEDDINGS_FILE, embeddings_matrix)
-            print(f"💾 Saved embeddings cache to {EMBEDDINGS_FILE}")
+            os.makedirs(chosen_data_dir, exist_ok=True)
+            np.save(embeddings_path, embeddings_matrix)
+            print(f"💾 Saved embeddings cache to {embeddings_path}")
         except Exception as exc:
             print("⚠️ Failed to write embeddings.npy cache (continuing):", exc)
 
