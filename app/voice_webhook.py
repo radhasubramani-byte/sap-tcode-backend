@@ -11,6 +11,7 @@ Fixes (production-safe for phone demos):
 - Deterministic alias priority + longest contains-match fallback
 - Confidence threshold logic
 - Robust DATA_DIR detection (Render + local)
+- NEW: Module is spoken as letters (MM -> "M M", SD -> "S D") for clarity
 """
 
 from __future__ import annotations
@@ -221,7 +222,7 @@ def response_type_for_score(score: float) -> str:
 # -------------------------
 # TTS helpers (IMPORTANT)
 # -------------------------
-# Small 6-line improvement for perfect T-code pronunciation
+# Small improvement for perfect T-code pronunciation
 _DIGITS = "zero one two three four five six seven eight nine".split()
 
 def speak_tcode(code: str) -> str:
@@ -234,6 +235,16 @@ def speak_tcode(code: str) -> str:
         elif c == "_": out.append("underscore")
         else: out.append(c)
     return " ".join(out)
+
+def speak_letters(s: str) -> str:
+    """
+    MM -> "M M", SD -> "S D", FI -> "F I"
+    Safe for empty strings.
+    """
+    s = (s or "").strip().upper()
+    if not s:
+        return ""
+    return " ".join(list(s))
 
 def sap_prefix() -> str:
     # Period creates a natural micro-pause in TTS without speaking the word "pause"
@@ -257,10 +268,11 @@ def build_speech(best_match: Optional[Dict], results: List[Dict], c_label: str, 
 
     prefix = sap_prefix()
     spoken_code = speak_tcode(tcode)
+    module_spoken = speak_letters(module)
 
     if r_type == "confident" and c_label in ("high", "medium"):
-        if module:
-            return f"The {prefix} is {spoken_code}. {desc}. Module {module}."
+        if module_spoken:
+            return f"The {prefix} is {spoken_code}. {desc}. Module {module_spoken}."
         return f"The {prefix} is {spoken_code}. {desc}."
 
     # Uncertain: give up to 3 options, still spoken cleanly
@@ -268,8 +280,14 @@ def build_speech(best_match: Optional[Dict], results: List[Dict], c_label: str, 
     for r in results[:3]:
         tc = (r.get("tcode") or "").strip()
         dd = (r.get("description") or "").strip()
-        if tc:
-            opts.append(f"{speak_tcode(tc)} — {dd}")
+        mod = (r.get("module") or "").strip()
+        mod_sp = speak_letters(mod)
+
+        line = f"{speak_tcode(tc)} — {dd}"
+        if mod_sp:
+            line = f"{line}. Module {mod_sp}"
+        opts.append(line)
+
     options = " / ".join(opts) if opts else f"{spoken_code} — {desc}"
 
     return f"I’m not fully confident. The closest options are: {options}. Which one did you mean?"
