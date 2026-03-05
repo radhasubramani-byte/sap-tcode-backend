@@ -2,13 +2,12 @@
 """
 Voice webhook router for SAP T-code Assistant.
 
-Updates (per your request):
-- Say "SAP" as a single word (NO pauses between S-A-P)
-- Add a SMALL pause between "SAP" and "T-code"
-- Mention T-codes as "ME21N" (NO spaces/ellipsis in the text)
-  - Optionally speak them as characters via SSML without changing the visible text
-
-Other retained behavior:
+Fixes (production-safe for phone demos):
+- NEVER emits literal words like "pause" / "tiny pause" in speech
+- "SAP" is pronounced as letters: "S A P" (like U S A), with a small natural pause before "T-code"
+  achieved by punctuation: "S A P. T-code"
+- T-codes are spoken character-by-character; digits are spoken individually (25 -> "two five", NOT "twenty five")
+- Supports special characters commonly seen in SAP tcodes (/, -, _)
 - Deterministic alias priority + longest contains-match fallback
 - Confidence threshold logic
 - Robust DATA_DIR detection (Render + local)
@@ -32,7 +31,6 @@ except Exception:
     search_tcode = None  # type: ignore
     search_is_ready = lambda: False  # type: ignore
 
-
 router = APIRouter()
 
 # -------------------------
@@ -50,7 +48,6 @@ class VoiceWebhookResponse(BaseModel):
     confidence_label: str = Field(default="low")
     best_match: Optional[Dict] = None
     results: List[Dict] = Field(default_factory=list)
-
 
 # -------------------------
 # Robust DATA_DIR detection
@@ -70,7 +67,6 @@ def detect_data_dir() -> Optional[str]:
     return None
 
 DATA_DIR = detect_data_dir()
-
 
 # -------------------------
 # Alias loading + matching
@@ -94,7 +90,6 @@ _alias_map: Dict[str, AliasRecord] = {}
 _alias_loaded: bool = False
 _alias_load_error: Optional[str] = None
 
-
 def _normalize_text(s: str) -> str:
     if not s:
         return ""
@@ -103,7 +98,6 @@ def _normalize_text(s: str) -> str:
     s = re.sub(r"[^a-z0-9\s]", " ", s)
     s = re.sub(r"\s+", " ", s).strip()
     return s
-
 
 def _load_aliases_once() -> None:
     global _alias_loaded, _alias_load_error, _alias_map
@@ -161,7 +155,6 @@ def _load_aliases_once() -> None:
     if not any_loaded:
         print(f"⚠️ No alias files found in DATA_DIR={DATA_DIR}")
 
-
 def match_alias(transcript: str) -> Optional[Dict]:
     """
     Deterministic alias priority:
@@ -208,7 +201,6 @@ def match_alias(transcript: str) -> Optional[Dict]:
         "alias": rec2.alias,
     }
 
-
 # -------------------------
 # Confidence thresholds
 # -------------------------
@@ -226,119 +218,61 @@ def label_confidence(score: float) -> str:
 def response_type_for_score(score: float) -> str:
     return "confident" if score >= MEDIUM_THRESHOLD else "uncertain"
 
-
 # -------------------------
 # TTS helpers (IMPORTANT)
 # -------------------------
+# Small 6-line improvement for perfect T-code pronunciation
+_DIGITS = "zero one two three four five six seven eight nine".split()
 
-# If your VAPI voice supports SSML, set USE_SSML=1 (recommended).
-USE_SSML = os.getenv("USE_SSML", "1").strip().lower() in ("1", "true", "yes", "y")
+def speak_tcode(code: str) -> str:
+    code = (code or "").strip().upper()
+    out: List[str] = []
+    for c in code:
+        if c.isdigit(): out.append(_DIGITS[int(c)])
+        elif c == "/": out.append("slash")
+        elif c == "-": out.append("dash")
+        elif c == "_": out.append("underscore")
+        else: out.append(c)
+    return " ".join(out)
 
-def _ssml_escape(text: str) -> str:
-    # Minimal SSML escaping
-    return (
-        (text or "")
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-        .replace("'", "&apos;")
-    )
-
-def speak_brand_sap_tcode_prefix() -> str:
-    """
-    Desired spoken behavior:
-    - "SAP" as a single word (no S-A-P pauses)
-    - small pause between "SAP" and "T-code"
-    """
-    if USE_SSML:
-        # Small pause: 150ms feels natural on phone calls
-        return "<speak>SAP <break time='150ms'/>T-code</speak>"
-    return "SAP T-code"  # plain-text fallback (no forced letter spelling)
-
-def speak_tcode(tcode: str) -> str:
-    """
-    You want the code mentioned like "ME21N" (no spaces/ellipsis in the TEXT).
-    To still make it crystal clear by voice:
-    - Use SSML say-as characters (speaks M E 2 1 N) while keeping text as ME21N.
-    - Fallback: just return ME21N (TTS may pronounce it differently depending on voice).
-    """
-    tcode = (tcode or "").strip().upper()
-    if not tcode:
-        return ""
-    if USE_SSML:
-        # Keeps visible text compact while forcing character-by-character speech.
-        # Note: some engines expect "characters" / "spell-out"; characters is widely used.
-        return f"<speak><say-as interpret-as='characters'>{_ssml_escape(tcode)}</say-as></speak>"
-    return tcode
-
+def sap_prefix() -> str:
+    # Period creates a natural micro-pause in TTS without speaking the word "pause"
+    return "S A P. T-code"
 
 def build_speech(best_match: Optional[Dict], results: List[Dict], c_label: str, r_type: str) -> str:
     """
-    Builds the string that VAPI speaks.
+    IMPORTANT:
+    - Never include literal instruction words like "pause" or "tiny pause" in the speech text.
+    - Use punctuation for natural pauses.
     """
     if not best_match:
-        # Keep SAP as a single word in the message.
         return (
-            "I couldn’t find a matching SAP transaction code. "
+            "I couldn’t find a matching S A P transaction code. "
             "Try saying a task like create purchase order, post goods receipt, or change material."
         )
 
-    tcode = best_match.get("tcode") or ""
-    desc = best_match.get("description") or ""
-    module = best_match.get("module") or ""
+    tcode = (best_match.get("tcode") or "").strip()
+    desc = (best_match.get("description") or "").strip()
+    module = (best_match.get("module") or "").strip()
 
-    # Prefix ("SAP" + small pause + "T-code")
-    prefix = speak_brand_sap_tcode_prefix()
+    prefix = sap_prefix()
     spoken_code = speak_tcode(tcode)
 
-    # If SSML is enabled, prefix/spoken_code each includes <speak> wrapper.
-    # We should not nest <speak>. So we strip wrappers and build one <speak> per response.
-    if USE_SSML:
-        def strip_speak(x: str) -> str:
-            x = (x or "").strip()
-            if x.startswith("<speak>") and x.endswith("</speak>"):
-                return x[len("<speak>"):-len("</speak>")]
-            return x
-
-        prefix_inner = strip_speak(prefix)
-        code_inner = strip_speak(spoken_code)
-        desc_inner = _ssml_escape(desc)
-        module_inner = _ssml_escape(module)
-
-        if r_type == "confident" and c_label in ("high", "medium"):
-            if module_inner:
-                return f"<speak>The {prefix_inner} is {code_inner}. {desc_inner}. Module {module_inner}.</speak>"
-            return f"<speak>The {prefix_inner} is {code_inner}. {desc_inner}.</speak>"
-
-        # Uncertain: give up to 3 options
-        opts = []
-        for r in results[:3]:
-            tc = (r.get("tcode") or "").strip()
-            dd = (r.get("description") or "").strip()
-            if tc:
-                tc_ssml = strip_speak(speak_tcode(tc))
-                dd_ssml = _ssml_escape(dd)
-                opts.append(f"{tc_ssml} — {dd_ssml}")
-        options = " / ".join(opts) if opts else f"{code_inner} — {desc_inner}"
-        return f"<speak>I’m not fully confident. The closest options are: {options}. Which one did you mean?</speak>"
-
-    # Plain-text version (no SSML)
     if r_type == "confident" and c_label in ("high", "medium"):
         if module:
             return f"The {prefix} is {spoken_code}. {desc}. Module {module}."
         return f"The {prefix} is {spoken_code}. {desc}."
 
-    # Uncertain: give up to 3 options
+    # Uncertain: give up to 3 options, still spoken cleanly
     opts = []
     for r in results[:3]:
-        tc = (r.get("tcode") or "").strip().upper()
+        tc = (r.get("tcode") or "").strip()
         dd = (r.get("description") or "").strip()
         if tc:
-            opts.append(f"{tc} — {dd}")
-    options = " / ".join(opts) if opts else f"{tcode} — {desc}"
-    return f"I’m not fully confident. The closest options are: {options}. Which one did you mean?"
+            opts.append(f"{speak_tcode(tc)} — {dd}")
+    options = " / ".join(opts) if opts else f"{spoken_code} — {desc}"
 
+    return f"I’m not fully confident. The closest options are: {options}. Which one did you mean?"
 
 # -------------------------
 # Auth
@@ -360,7 +294,6 @@ def _check_bearer_token(authorization: Optional[str]) -> None:
     if got != expected:
         raise HTTPException(status_code=403, detail="Invalid webhook secret")
 
-
 # -------------------------
 # Main endpoint
 # -------------------------
@@ -377,7 +310,7 @@ def voice_webhook(
     transcript = (payload.transcript or "").strip()
     if not transcript:
         return VoiceWebhookResponse(
-            speech="Please say what you want to do in SAP, for example: create purchase order.",
+            speech="Please say what you want to do in S A P, for example: create purchase order.",
             type="none",
             confidence=0.0,
             confidence_label="low",
@@ -412,7 +345,7 @@ def voice_webhook(
     try:
         if not search_is_ready():
             return VoiceWebhookResponse(
-                speech="One moment — I’m loading the SAP knowledge base.",
+                speech="One moment — I’m loading the S A P knowledge base.",
                 type="warming_up",
                 confidence=0.0,
                 confidence_label="low",
@@ -427,7 +360,7 @@ def voice_webhook(
 
         if isinstance(search_resp, dict) and search_resp.get("status") == "warming_up":
             return VoiceWebhookResponse(
-                speech="One moment — I’m loading the SAP knowledge base.",
+                speech="One moment — I’m loading the S A P knowledge base.",
                 type="warming_up",
                 confidence=0.0,
                 confidence_label="low",
@@ -467,14 +400,13 @@ def voice_webhook(
     except Exception as exc:
         print("voice_webhook error:", repr(exc))
         return VoiceWebhookResponse(
-            speech="Sorry, I’m having trouble reaching the SAP assistant right now. Please try again.",
+            speech="Sorry, I’m having trouble reaching the S A P assistant right now. Please try again.",
             type="error",
             confidence=0.0,
             confidence_label="low",
             best_match=None,
             results=[],
         )
-
 
 @router.get("/voice-webhook/health")
 def voice_webhook_health():
@@ -485,5 +417,6 @@ def voice_webhook_health():
         "alias_load_error": _alias_load_error,
         "search_ready": bool(search_is_ready()) if callable(search_is_ready) else False,
         "alias_count": len(_alias_map),
-        "use_ssml": USE_SSML,
+        "confident_threshold": CONFIDENT_THRESHOLD,
+        "medium_threshold": MEDIUM_THRESHOLD,
     }
