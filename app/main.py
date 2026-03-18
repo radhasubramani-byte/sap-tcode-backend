@@ -37,6 +37,10 @@ def root() -> Dict[str, Any]:
         "status": "ok",
         "service": "sap-tcode-backend",
         "ready": bool(is_ready()),
+        "interfaces": {
+            "voice": "enabled",
+            "chat": "enabled",
+        },
     }
 
 
@@ -46,8 +50,8 @@ def health() -> Dict[str, Any]:
 
 
 # ----------------------------
-# ✅ SEARCH ENDPOINT (fixes 404)
-# voice_webhook.py was calling /search-tcode?q=...&top_k=...
+# SEARCH ENDPOINT
+# Existing shared backend search endpoint
 # ----------------------------
 @app.get("/search-tcode")
 def search_tcode_endpoint(
@@ -79,8 +83,8 @@ def _mount_voice_routes() -> None:
         app.include_router(voice_router)
         print("✅ Mounted voice webhook routes (router)")
         return
-    except Exception:
-        pass
+    except Exception as e:
+        print("ℹ️ voice router import failed:", repr(e))
 
     # Alternate pattern: a function to mount routes
     for fn_name in ("mount_voice_routes", "register_voice_routes", "register_voice_webhook_routes"):
@@ -97,4 +101,37 @@ def _mount_voice_routes() -> None:
     print("ℹ️ voice webhook module found but no router/mount function detected (skipping)")
 
 
+# ----------------------------
+# Mount chat webhook routes (defensive)
+# Supports either:
+#   - chat_webhook.py defines `router` (FastAPI APIRouter)
+#   - chat_webhook.py defines `mount_*` or `register_*` function
+# ----------------------------
+def _mount_chat_routes() -> None:
+    try:
+        # Most common pattern: router = APIRouter()
+        from app.chat_webhook import router as chat_router  # type: ignore
+
+        app.include_router(chat_router)
+        print("✅ Mounted chat webhook routes (router)")
+        return
+    except Exception as e:
+        print("ℹ️ chat router import failed:", repr(e))
+
+    # Alternate pattern: a function to mount routes
+    for fn_name in ("mount_chat_routes", "register_chat_routes", "register_chat_webhook_routes"):
+        try:
+            mod = __import__("app.chat_webhook", fromlist=[fn_name])
+            fn = getattr(mod, fn_name, None)
+            if callable(fn):
+                fn(app)
+                print(f"✅ Mounted chat webhook routes ({fn_name})")
+                return
+        except Exception:
+            continue
+
+    print("ℹ️ chat webhook module found but no router/mount function detected (skipping)")
+
+
 _mount_voice_routes()
+_mount_chat_routes()
