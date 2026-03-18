@@ -48,6 +48,7 @@ class TCodeResult(BaseModel):
 class ChatResponse(BaseModel):
     reply: str
     type: str
+    status: Optional[str] = None
     confidence: float
     confidence_label: str
     best_match: Optional[TCodeResult] = None
@@ -88,7 +89,8 @@ def chat_search_tcode(payload: ChatRequest) -> ChatResponse:
     Response:
     {
       "reply": "SAP T-code: ME21N\\nDescription: Create Purchase Order\\nModule: MM",
-      "type": "match",
+      "type": "confident",
+      "status": null,
       "confidence": 0.97,
       "confidence_label": "high",
       "best_match": {...},
@@ -101,7 +103,8 @@ def chat_search_tcode(payload: ChatRequest) -> ChatResponse:
         if not user_message:
             return ChatResponse(
                 reply="Please enter an SAP business task or an SAP T-code-related question.",
-                type="no_match",
+                type="none",
+                status="invalid_query",
                 confidence=0.0,
                 confidence_label="low",
                 best_match=None,
@@ -122,7 +125,8 @@ def chat_search_tcode(payload: ChatRequest) -> ChatResponse:
 
         return ChatResponse(
             reply=str(result.get("reply", "")),
-            type=str(result.get("type", "no_match")),
+            type=str(result.get("type", "none")),
+            status=result.get("status"),
             confidence=float(result.get("confidence", 0.0) or 0.0),
             confidence_label=str(result.get("confidence_label", "low")),
             best_match=best_match_obj,
