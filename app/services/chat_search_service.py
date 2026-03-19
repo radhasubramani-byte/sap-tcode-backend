@@ -11,7 +11,7 @@ Purpose:
 
 Expected behavior:
 Input:  "How do I create a purchase order?"
-Output: "SAP T-code: ME21N\nDescription: Create Purchase Order\nModule: MM"
+Output: enterprise-style formatted chat response with T-code prominence
 """
 
 from __future__ import annotations
@@ -250,12 +250,19 @@ def _normalize_result(raw_result: Any) -> Dict[str, Any]:
 # -----------------------------------------------------------------------------
 def _build_high_confidence_reply(best_match: Dict[str, Any]) -> str:
     lines = [
-        f"SAP T-code: {best_match['tcode']}",
-        f"Description: {best_match['description'] or 'N/A'}",
+        "━━━━━━━━━━━━━━━━━━━━━━",
+        "SAP TRANSACTION",
+        f"{best_match['tcode']}",
+        "━━━━━━━━━━━━━━━━━━━━━━",
+        f"{best_match['description'] or 'N/A'}",
     ]
 
     if best_match["module"]:
         lines.append(f"Module: {best_match['module']}")
+
+    lines.append("")
+    lines.append("Confidence: High")
+    lines.append("━━━━━━━━━━━━━━━━━━━━━━")
 
     return "\n".join(lines)
 
@@ -266,21 +273,27 @@ def _build_uncertain_reply(
     confidence_label: str,
 ) -> str:
     lines = [
-        f"Best match SAP T-code: {best_match['tcode']}",
-        f"Description: {best_match['description'] or 'N/A'}",
+        "━━━━━━━━━━━━━━━━━━━━━━",
+        "SAP TRANSACTION",
+        f"{best_match['tcode']}",
+        "━━━━━━━━━━━━━━━━━━━━━━",
+        f"{best_match['description'] or 'N/A'}",
     ]
 
     if best_match["module"]:
         lines.append(f"Module: {best_match['module']}")
 
+    lines.append("")
     lines.append(f"Confidence: {confidence_label.title()}")
 
     if alternatives:
         lines.append("")
-        lines.append("Other possible matches:")
+        lines.append("Alternative options:")
         for item in alternatives[:3]:
             suffix = f" ({item['module']})" if item["module"] else ""
             lines.append(f"- {item['tcode']} — {item['description'] or 'No description'}{suffix}")
+
+    lines.append("━━━━━━━━━━━━━━━━━━━━━━")
 
     return "\n".join(lines)
 
@@ -288,8 +301,9 @@ def _build_uncertain_reply(
 def _build_no_match_reply(results: List[Dict[str, Any]]) -> str:
     if results:
         lines = [
-            "I could not find a strong SAP T-code match for that request.",
-            "",
+            "━━━━━━━━━━━━━━━━━━━━━━",
+            "NO STRONG SAP MATCH FOUND",
+            "━━━━━━━━━━━━━━━━━━━━━━",
             "Closest matches:",
         ]
         for item in results[:5]:
@@ -298,26 +312,34 @@ def _build_no_match_reply(results: List[Dict[str, Any]]) -> str:
 
         lines.append("")
         lines.append("Try rephrasing the SAP business action.")
+        lines.append("━━━━━━━━━━━━━━━━━━━━━━")
         return "\n".join(lines)
 
     return (
-        "I could not find a matching SAP T-code.\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        "NO MATCH FOUND\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
         "Try questions like:\n"
         "- create purchase order\n"
         "- post goods receipt\n"
         "- change material\n"
-        "- create sales order"
+        "- create sales order\n"
+        "━━━━━━━━━━━━━━━━━━━━━━"
     )
 
 
 def _build_irrelevant_reply() -> str:
     return (
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        "SAP ASSISTANT\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
         "I can help only with SAP business tasks and SAP T-codes.\n\n"
         "Try questions like:\n"
         "- create purchase order\n"
         "- post goods receipt\n"
         "- change material\n"
-        "- create sales order"
+        "- create sales order\n"
+        "━━━━━━━━━━━━━━━━━━━━━━"
     )
 
 
@@ -325,15 +347,39 @@ def _build_status_reply(status: str, message: str) -> str:
     status = _safe_str(status).lower()
 
     if status == "warming_up":
-        return "The SAP knowledge base is still loading. Please try again in a moment."
+        return (
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "SAP ASSISTANT\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "The SAP knowledge base is still loading. Please try again in a moment.\n"
+            "━━━━━━━━━━━━━━━━━━━━━━"
+        )
 
     if status == "invalid_query":
-        return "Please enter an SAP business task or an SAP T-code-related question."
+        return (
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "SAP ASSISTANT\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "Please enter an SAP business task or an SAP T-code-related question.\n"
+            "━━━━━━━━━━━━━━━━━━━━━━"
+        )
 
     if status == "error":
-        return message or "The SAP chat assistant encountered an internal error while searching."
+        return (
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "SAP ASSISTANT ERROR\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"{message or 'The SAP chat assistant encountered an internal error while searching.'}\n"
+            "━━━━━━━━━━━━━━━━━━━━━━"
+        )
 
-    return message or "The SAP chat assistant could not process the request."
+    return (
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        "SAP ASSISTANT\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"{message or 'The SAP chat assistant could not process the request.'}\n"
+        "━━━━━━━━━━━━━━━━━━━━━━"
+    )
 
 
 def build_chat_reply(result: Dict[str, Any], user_message: str) -> str:
@@ -437,8 +483,12 @@ def search_tcodes_for_chat(user_message: str) -> Dict[str, Any]:
         logger.exception("Chat search failed for query: %s", query)
         return {
             "reply": (
+                "━━━━━━━━━━━━━━━━━━━━━━\n"
+                "SAP ASSISTANT ERROR\n"
+                "━━━━━━━━━━━━━━━━━━━━━━\n"
                 "The SAP chat assistant encountered an internal error while searching.\n"
-                "Please try again or contact the support team."
+                "Please try again or contact the support team.\n"
+                "━━━━━━━━━━━━━━━━━━━━━━"
             ),
             "type": "none",
             "status": "error",
@@ -449,3 +499,4 @@ def search_tcodes_for_chat(user_message: str) -> Dict[str, Any]:
             "alternatives": [],
             "error": str(exc),
         }
+
