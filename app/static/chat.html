@@ -17,7 +17,9 @@
       --bot: #1f2937;
     }
 
-    * { box-sizing: border-box; }
+    * {
+      box-sizing: border-box;
+    }
 
     body {
       margin: 0;
@@ -83,7 +85,7 @@
       white-space: pre-wrap;
       line-height: 1.45;
       border: 1px solid var(--border);
-      box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
     }
 
     .message-row.user .bubble {
@@ -111,7 +113,12 @@
       left: 0;
       right: 0;
       bottom: 0;
-      background: linear-gradient(180deg, rgba(15,23,42,0) 0%, rgba(15,23,42,0.92) 22%, rgba(15,23,42,1) 100%);
+      background: linear-gradient(
+        180deg,
+        rgba(15, 23, 42, 0) 0%,
+        rgba(15, 23, 42, 0.92) 22%,
+        rgba(15, 23, 42, 1) 100%
+      );
       padding: 16px;
     }
 
@@ -183,9 +190,47 @@
       cursor: pointer;
     }
 
+    .copy-btn {
+      margin-top: 8px;
+      background: #16a34a;
+      border: none;
+      color: white;
+      padding: 6px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      min-width: auto;
+      display: inline-block;
+    }
+
+    .sap-badge {
+      display: inline-block;
+      background: #111827;
+      color: #22c55e;
+      border: 1px solid #374151;
+      padding: 6px 10px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 14px;
+      margin: 6px 0;
+      letter-spacing: 1px;
+    }
+
+    .bot-card-text {
+      margin-top: 8px;
+      white-space: pre-wrap;
+      line-height: 1.45;
+    }
+
     @media (max-width: 720px) {
-      .bubble { max-width: 92%; }
-      .header h1 { font-size: 18px; }
+      .bubble {
+        max-width: 92%;
+      }
+
+      .header h1 {
+        font-size: 18px;
+      }
     }
   </style>
 </head>
@@ -224,7 +269,12 @@ Ask me things like:
 
   <div class="composer-wrap">
     <div class="composer">
-      <textarea id="messageInput" rows="1" placeholder="Message SAP T-Code Assistant..." oninput="autoResize(this)"></textarea>
+      <textarea
+        id="messageInput"
+        rows="1"
+        placeholder="Message SAP T-Code Assistant..."
+        oninput="autoResize(this)"
+      ></textarea>
       <button id="sendBtn" onclick="sendMessage()">Send</button>
     </div>
   </div>
@@ -237,32 +287,100 @@ Ask me things like:
       el.style.height = Math.min(el.scrollHeight, 180) + "px";
     }
 
+    function usePrompt(text) {
+      const input = document.getElementById("messageInput");
+      input.value = text;
+      autoResize(input);
+      input.focus();
+    }
+
     function addMessage(role, text) {
       const chat = document.getElementById("chat");
       const row = document.createElement("div");
       row.className = `message-row ${role}`;
 
       const wrapper = document.createElement("div");
-      const bubble = document.createElement("div");
-      bubble.className = "bubble";
-      bubble.textContent = text;
+
+      if (role === "bot" && text.includes("SAP T-CODE")) {
+        const bubble = document.createElement("div");
+        bubble.className = "bubble";
+
+        const lines = text.split("\n");
+        let tcode = "";
+        const cleanedText = [];
+
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i].trim();
+
+          if (!line) {
+            cleanedText.push("");
+            continue;
+          }
+
+          if (line.includes("SAP T-CODE") && lines[i + 1]) {
+            tcode = lines[i + 1].trim();
+            i++;
+            continue;
+          }
+
+          if (line.includes("━━")) {
+            continue;
+          }
+
+          cleanedText.push(line);
+        }
+
+        if (tcode) {
+          const badge = document.createElement("div");
+          badge.className = "sap-badge";
+          badge.textContent = tcode;
+          bubble.appendChild(badge);
+
+          const btn = document.createElement("button");
+          btn.className = "copy-btn";
+          btn.textContent = "Copy T-code";
+
+          btn.onclick = async () => {
+            try {
+              await navigator.clipboard.writeText(tcode);
+              btn.textContent = "Copied!";
+              setTimeout(() => {
+                btn.textContent = "Copy T-code";
+              }, 1500);
+            } catch (err) {
+              btn.textContent = "Copy failed";
+              setTimeout(() => {
+                btn.textContent = "Copy T-code";
+              }, 1500);
+            }
+          };
+
+          bubble.appendChild(document.createElement("br"));
+          bubble.appendChild(btn);
+        }
+
+        const desc = document.createElement("div");
+        desc.className = "bot-card-text";
+        desc.textContent = cleanedText.join("\n").trim();
+        bubble.appendChild(desc);
+
+        wrapper.appendChild(bubble);
+      } else {
+        const bubble = document.createElement("div");
+        bubble.className = "bubble";
+        bubble.textContent = text;
+        wrapper.appendChild(bubble);
+      }
 
       const meta = document.createElement("div");
       meta.className = "meta";
       meta.textContent = role === "user" ? "you" : "assistant";
 
-      wrapper.appendChild(bubble);
       wrapper.appendChild(meta);
       row.appendChild(wrapper);
       chat.appendChild(row);
-      chat.scrollTop = chat.scrollHeight;
-    }
 
-    function usePrompt(text) {
-      const input = document.getElementById("messageInput");
-      input.value = text;
-      autoResize(input);
-      input.focus();
+      chat.scrollTop = chat.scrollHeight;
     }
 
     async function sendMessage() {
@@ -285,7 +403,7 @@ Ask me things like:
           },
           body: JSON.stringify({
             session_id: "web-demo-session",
-            message
+            message: message
           })
         });
 
