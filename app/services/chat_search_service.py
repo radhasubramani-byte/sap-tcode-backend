@@ -499,4 +499,3 @@ def search_tcodes_for_chat(user_message: str) -> Dict[str, Any]:
             "alternatives": [],
             "error": str(exc),
         }
-
