@@ -312,10 +312,7 @@ Ask me things like:
         for (let i = 0; i < lines.length; i++) {
           const line = lines[i].trim();
 
-          if (!line) {
-            cleanedText.push("");
-            continue;
-          }
+          if (!line) continue;
 
           if (line.includes("SAP T-CODE") && lines[i + 1]) {
             tcode = lines[i + 1].trim();
@@ -323,9 +320,10 @@ Ask me things like:
             continue;
           }
 
-          if (line.includes("━━")) {
-            continue;
-          }
+          if (line.includes("━━")) continue;
+
+          if (line.toLowerCase().includes("confidence")) continue;
+          if (["high", "medium", "low"].includes(line.toLowerCase())) continue;
 
           cleanedText.push(line);
         }
