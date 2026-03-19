@@ -17,9 +17,7 @@
       --bot: #1f2937;
     }
 
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
 
     body {
       margin: 0;
@@ -224,13 +222,8 @@
     }
 
     @media (max-width: 720px) {
-      .bubble {
-        max-width: 92%;
-      }
-
-      .header h1 {
-        font-size: 18px;
-      }
+      .bubble { max-width: 92%; }
+      .header h1 { font-size: 18px; }
     }
   </style>
 </head>
@@ -314,20 +307,16 @@ Ask me things like:
 
           if (!line) continue;
 
-          // Extract T-code from line after "SAP T-CODE"
           if (line.includes("SAP T-CODE") && lines[i + 1]) {
             tcode = lines[i + 1].trim();
             i++;
             continue;
           }
 
-          // Skip divider lines
           if (line.includes("━━")) continue;
-
-          // Remove only the confidence line
           if (line.toLowerCase().startsWith("confidence")) continue;
+          if (line.toLowerCase().startsWith("module:")) continue;
 
-          // Keep everything else, including Module
           cleanedText.push(line);
         }
 
