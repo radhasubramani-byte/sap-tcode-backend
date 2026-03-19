@@ -4,7 +4,7 @@ import threading
 from typing import Any, Dict, Optional
 
 from fastapi import FastAPI, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 
 # Search service (semantic)
 from app.services.search_service import initialize_search, is_ready, search_tcode
@@ -40,6 +40,7 @@ def root() -> Dict[str, Any]:
         "interfaces": {
             "voice": "enabled",
             "chat": "enabled",
+            "chat_ui": "enabled",
         },
     }
 
@@ -47,6 +48,22 @@ def root() -> Dict[str, Any]:
 @app.get("/health")
 def health() -> Dict[str, Any]:
     return {"ok": True, "ready": bool(is_ready())}
+
+
+# ----------------------------
+# Chat UI route
+# ----------------------------
+@app.get("/chat-ui", response_class=HTMLResponse)
+def chat_ui():
+    try:
+        file_path = os.path.join(os.path.dirname(__file__), "static", "chat.html")
+        with open(file_path, "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read())
+    except Exception as e:
+        return HTMLResponse(
+            content=f"<h3>Failed to load chat UI: {str(e)}</h3>",
+            status_code=500,
+        )
 
 
 # ----------------------------
@@ -77,7 +94,6 @@ def search_tcode_endpoint(
 # ----------------------------
 def _mount_voice_routes() -> None:
     try:
-        # Most common pattern: router = APIRouter()
         from app.voice_webhook import router as voice_router  # type: ignore
 
         app.include_router(voice_router)
@@ -86,7 +102,6 @@ def _mount_voice_routes() -> None:
     except Exception as e:
         print("ℹ️ voice router import failed:", repr(e))
 
-    # Alternate pattern: a function to mount routes
     for fn_name in ("mount_voice_routes", "register_voice_routes", "register_voice_webhook_routes"):
         try:
             mod = __import__("app.voice_webhook", fromlist=[fn_name])
@@ -109,7 +124,6 @@ def _mount_voice_routes() -> None:
 # ----------------------------
 def _mount_chat_routes() -> None:
     try:
-        # Most common pattern: router = APIRouter()
         from app.chat_webhook import router as chat_router  # type: ignore
 
         app.include_router(chat_router)
@@ -118,7 +132,6 @@ def _mount_chat_routes() -> None:
     except Exception as e:
         print("ℹ️ chat router import failed:", repr(e))
 
-    # Alternate pattern: a function to mount routes
     for fn_name in ("mount_chat_routes", "register_chat_routes", "register_chat_webhook_routes"):
         try:
             mod = __import__("app.chat_webhook", fromlist=[fn_name])
