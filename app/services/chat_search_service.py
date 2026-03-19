@@ -1,17 +1,13 @@
 """
 chat_search_service.py
 
-Separate chat-only search/formatting layer for the SAP T-Code Assistant.
-This file does NOT modify the existing voice flow.
+Chat-only formatting layer for SAP T-Code Assistant.
+Does NOT modify voice agent.
 
-Purpose:
-- Reuse the same backend search logic
-- Build chat-friendly text responses
-- Keep chat isolated from the voice agent
-
-Expected behavior:
-Input:  "How do I create a purchase order?"
-Output: enterprise-style formatted chat response with T-code prominence
+Key features:
+- Reuses existing search_service
+- Clean enterprise UI formatting
+- Strong T-code visual emphasis
 """
 
 from __future__ import annotations
@@ -25,19 +21,9 @@ logger = logging.getLogger(__name__)
 
 
 # -----------------------------------------------------------------------------
-# Search service resolver
+# Resolve search function dynamically
 # -----------------------------------------------------------------------------
 def _resolve_search_function() -> Callable[..., Dict[str, Any]]:
-    """
-    Tries to find a usable search function inside the existing search_service.py.
-
-    Supported function names:
-    - search_tcodes
-    - search_tcode
-    - search
-    - find_tcode
-    - find_tcodes
-    """
     candidate_names = [
         "search_tcodes",
         "search_tcode",
@@ -49,209 +35,75 @@ def _resolve_search_function() -> Callable[..., Dict[str, Any]]:
     for name in candidate_names:
         fn = getattr(search_service, name, None)
         if callable(fn):
-            logger.info("Using search function from search_service: %s", name)
+            logger.info("Using search function: %s", name)
             return fn
 
-    raise ImportError(
-        "app.services.search_service was found, but no supported search function was detected. "
-        "Expected one of: search_tcodes, search_tcode, search, find_tcode, find_tcodes"
-    )
+    raise ImportError("No valid search function found in search_service")
 
 
 SEARCH_FUNCTION = _resolve_search_function()
 
 
 # -----------------------------------------------------------------------------
-# Utility helpers
+# Helpers
 # -----------------------------------------------------------------------------
 def _safe_str(value: Any) -> str:
-    if value is None:
-        return ""
-    return str(value).strip()
+    return str(value).strip() if value else ""
 
 
 def _normalize_match_item(item: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     if not item:
         return {"tcode": "", "description": "", "module": "", "score": None}
 
-    tcode = (
-        item.get("tcode")
-        or item.get("code")
-        or item.get("transaction_code")
-        or item.get("sap_tcode")
-        or ""
-    )
-    description = (
-        item.get("description")
-        or item.get("desc")
-        or item.get("text")
-        or item.get("title")
-        or ""
-    )
-    module = item.get("module") or item.get("component") or item.get("area") or ""
-    score = item.get("score", item.get("similarity"))
-
-    try:
-        score = float(score) if score is not None else None
-    except Exception:
-        score = None
-
     return {
-        "tcode": _safe_str(tcode),
-        "description": _safe_str(description),
-        "module": _safe_str(module),
-        "score": score,
+        "tcode": _safe_str(
+            item.get("tcode")
+            or item.get("code")
+            or item.get("transaction_code")
+        ),
+        "description": _safe_str(
+            item.get("description")
+            or item.get("desc")
+            or item.get("text")
+        ),
+        "module": _safe_str(
+            item.get("module")
+            or item.get("component")
+            or item.get("area")
+        ),
+        "score": item.get("score"),
     }
 
 
 def _dedupe_results(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     seen = set()
-    deduped: List[Dict[str, Any]] = []
+    out = []
 
-    for item in results:
-        normalized = _normalize_match_item(item)
-        key = normalized["tcode"].upper()
+    for r in results:
+        key = r.get("tcode", "").upper()
+        if key and key not in seen:
+            seen.add(key)
+            out.append(r)
 
-        if not key:
-            key = f"__NO_TCODE__::{normalized['description']}::{normalized['module']}"
-
-        if key in seen:
-            continue
-
-        seen.add(key)
-        deduped.append(normalized)
-
-    return deduped
+    return out
 
 
-def _looks_irrelevant_query(user_message: str) -> bool:
-    text = _safe_str(user_message).lower()
-    if not text:
-        return True
+def _looks_irrelevant_query(q: str) -> bool:
+    q = q.lower()
 
-    irrelevant_signals = [
-        "weather",
-        "temperature",
-        "tell me a joke",
-        "joke",
-        "news",
-        "who is the president",
-        "stock price",
-        "movie showtimes",
-        "sports score",
-    ]
+    irrelevant = ["weather", "joke", "news", "stock price"]
+    sap = ["sap", "po", "pr", "invoice", "material", "delivery"]
 
-    sap_signals = [
-        "sap",
-        "tcode",
-        "t-code",
-        "purchase order",
-        "sales order",
-        "goods receipt",
-        "material",
-        "invoice",
-        "delivery",
-        "sto",
-        "vendor",
-        "customer",
-        "production order",
-        "billing",
-        "gr",
-        "po",
-        "pr",
-    ]
-
-    has_irrelevant = any(signal in text for signal in irrelevant_signals)
-    has_sap_context = any(signal in text for signal in sap_signals)
-
-    return has_irrelevant and not has_sap_context
-
-
-def _score_to_confidence_label(score: Optional[float]) -> str:
-    if score is None:
-        return "low"
-    if score >= 0.70:
-        return "high"
-    if score >= 0.40:
-        return "medium"
-    return "low"
-
-
-def _normalize_result(raw_result: Any) -> Dict[str, Any]:
-    """
-    Normalizes the actual response format coming from app.services.search_service.
-
-    Expected real shapes from your backend:
-    - {"type": "confident"|"uncertain"|"none", ...}
-    - {"status": "warming_up"|"error"|"invalid_query", ...}
-    """
-    if raw_result is None:
-        return {
-            "type": "none",
-            "status": None,
-            "message": "",
-            "confidence": 0.0,
-            "confidence_label": "low",
-            "best_match": None,
-            "alternatives": [],
-            "results": [],
-        }
-
-    if isinstance(raw_result, dict):
-        result = dict(raw_result)
-    else:
-        result = {
-            "type": getattr(raw_result, "type", "none"),
-            "status": getattr(raw_result, "status", None),
-            "message": getattr(raw_result, "message", ""),
-            "confidence": getattr(raw_result, "confidence", 0.0),
-            "confidence_label": getattr(raw_result, "confidence_label", "low"),
-            "best_match": getattr(raw_result, "best_match", None),
-            "alternatives": getattr(raw_result, "alternatives", []),
-            "results": getattr(raw_result, "results", []),
-        }
-
-    result.setdefault("type", "none")
-    result.setdefault("status", None)
-    result.setdefault("message", "")
-    result.setdefault("confidence", 0.0)
-    result.setdefault("confidence_label", "low")
-    result.setdefault("best_match", None)
-    result.setdefault("alternatives", [])
-    result.setdefault("results", [])
-
-    try:
-        result["confidence"] = float(result.get("confidence", 0.0) or 0.0)
-    except Exception:
-        result["confidence"] = 0.0
-
-    confidence_label = _safe_str(result.get("confidence_label", "")).lower()
-    if confidence_label not in {"low", "medium", "high"}:
-        confidence_label = _score_to_confidence_label(result.get("confidence"))
-    result["confidence_label"] = confidence_label
-
-    result["best_match"] = _normalize_match_item(result.get("best_match"))
-
-    normalized_results: List[Dict[str, Any]] = []
-    for item in result.get("results", []) or []:
-        normalized_results.append(_normalize_match_item(item))
-    result["results"] = _dedupe_results(normalized_results)
-
-    normalized_alternatives: List[Dict[str, Any]] = []
-    for item in result.get("alternatives", []) or []:
-        normalized_alternatives.append(_normalize_match_item(item))
-    result["alternatives"] = _dedupe_results(normalized_alternatives)
-
-    return result
+    return any(x in q for x in irrelevant) and not any(x in q for x in sap)
 
 
 # -----------------------------------------------------------------------------
-# Chat response builders
+# Response builders
 # -----------------------------------------------------------------------------
 def _build_high_confidence_reply(best_match: Dict[str, Any]) -> str:
     lines = [
         "━━━━━━━━━━━━━━━━━━━━━━",
-        "SAP TRANSACTION",
+        "SAP T-CODE",
         f"{best_match['tcode']}",
         "━━━━━━━━━━━━━━━━━━━━━━",
         f"{best_match['description'] or 'N/A'}",
@@ -272,9 +124,10 @@ def _build_uncertain_reply(
     alternatives: List[Dict[str, Any]],
     confidence_label: str,
 ) -> str:
+
     lines = [
         "━━━━━━━━━━━━━━━━━━━━━━",
-        "SAP TRANSACTION",
+        "SAP T-CODE",
         f"{best_match['tcode']}",
         "━━━━━━━━━━━━━━━━━━━━━━",
         f"{best_match['description'] or 'N/A'}",
@@ -288,10 +141,10 @@ def _build_uncertain_reply(
 
     if alternatives:
         lines.append("")
-        lines.append("Alternative options:")
-        for item in alternatives[:3]:
-            suffix = f" ({item['module']})" if item["module"] else ""
-            lines.append(f"- {item['tcode']} — {item['description'] or 'No description'}{suffix}")
+        lines.append("Other matches:")
+        for alt in alternatives[:3]:
+            suffix = f" ({alt['module']})" if alt["module"] else ""
+            lines.append(f"- {alt['tcode']} — {alt['description']}{suffix}")
 
     lines.append("━━━━━━━━━━━━━━━━━━━━━━")
 
@@ -301,201 +154,113 @@ def _build_uncertain_reply(
 def _build_no_match_reply(results: List[Dict[str, Any]]) -> str:
     if results:
         lines = [
-            "━━━━━━━━━━━━━━━━━━━━━━",
-            "NO STRONG SAP MATCH FOUND",
-            "━━━━━━━━━━━━━━━━━━━━━━",
+            "No strong SAP match found.",
+            "",
             "Closest matches:",
         ]
-        for item in results[:5]:
-            suffix = f" ({item['module']})" if item["module"] else ""
-            lines.append(f"- {item['tcode']} — {item['description'] or 'No description'}{suffix}")
 
-        lines.append("")
-        lines.append("Try rephrasing the SAP business action.")
-        lines.append("━━━━━━━━━━━━━━━━━━━━━━")
+        for r in results[:5]:
+            lines.append(f"- {r['tcode']} — {r['description']} ({r['module']})")
+
         return "\n".join(lines)
 
     return (
-        "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "NO MATCH FOUND\n"
-        "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "Try questions like:\n"
+        "No SAP T-code found.\n\n"
+        "Try:\n"
         "- create purchase order\n"
         "- post goods receipt\n"
-        "- change material\n"
-        "- create sales order\n"
-        "━━━━━━━━━━━━━━━━━━━━━━"
+        "- change material"
     )
 
 
 def _build_irrelevant_reply() -> str:
     return (
-        "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "SAP ASSISTANT\n"
-        "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "I can help only with SAP business tasks and SAP T-codes.\n\n"
-        "Try questions like:\n"
+        "I can help only with SAP tasks.\n\n"
+        "Try:\n"
         "- create purchase order\n"
         "- post goods receipt\n"
-        "- change material\n"
-        "- create sales order\n"
-        "━━━━━━━━━━━━━━━━━━━━━━"
+        "- change material"
     )
 
 
-def _build_status_reply(status: str, message: str) -> str:
-    status = _safe_str(status).lower()
-
-    if status == "warming_up":
-        return (
-            "━━━━━━━━━━━━━━━━━━━━━━\n"
-            "SAP ASSISTANT\n"
-            "━━━━━━━━━━━━━━━━━━━━━━\n"
-            "The SAP knowledge base is still loading. Please try again in a moment.\n"
-            "━━━━━━━━━━━━━━━━━━━━━━"
-        )
-
-    if status == "invalid_query":
-        return (
-            "━━━━━━━━━━━━━━━━━━━━━━\n"
-            "SAP ASSISTANT\n"
-            "━━━━━━━━━━━━━━━━━━━━━━\n"
-            "Please enter an SAP business task or an SAP T-code-related question.\n"
-            "━━━━━━━━━━━━━━━━━━━━━━"
-        )
-
-    if status == "error":
-        return (
-            "━━━━━━━━━━━━━━━━━━━━━━\n"
-            "SAP ASSISTANT ERROR\n"
-            "━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"{message or 'The SAP chat assistant encountered an internal error while searching.'}\n"
-            "━━━━━━━━━━━━━━━━━━━━━━"
-        )
-
-    return (
-        "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "SAP ASSISTANT\n"
-        "━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"{message or 'The SAP chat assistant could not process the request.'}\n"
-        "━━━━━━━━━━━━━━━━━━━━━━"
-    )
-
-
+# -----------------------------------------------------------------------------
+# Core builder
+# -----------------------------------------------------------------------------
 def build_chat_reply(result: Dict[str, Any], user_message: str) -> str:
+
     if _looks_irrelevant_query(user_message):
         return _build_irrelevant_reply()
 
-    status = _safe_str(result.get("status"))
-    if status:
-        return _build_status_reply(status, _safe_str(result.get("message")))
-
-    result_type = _safe_str(result.get("type", "none")).lower()
-    confidence_label = _safe_str(result.get("confidence_label", "low")).lower()
+    result_type = result.get("type", "")
+    confidence_label = result.get("confidence_label", "low")
 
     best_match = _normalize_match_item(result.get("best_match"))
     results = _dedupe_results(result.get("results", []))
-    alternatives = _dedupe_results(result.get("alternatives", []))
 
-    has_best_match = bool(best_match.get("tcode"))
+    has_match = bool(best_match.get("tcode"))
 
-    if result_type == "confident" and has_best_match:
+    if result_type == "confident" and has_match:
         return _build_high_confidence_reply(best_match)
 
-    if result_type == "uncertain" and has_best_match:
-        if not alternatives:
-            alternatives = [r for r in results if r.get("tcode") != best_match.get("tcode")]
-        return _build_uncertain_reply(best_match, alternatives, confidence_label)
-
-    if result_type == "none":
-        return _build_no_match_reply(results)
-
-    if has_best_match:
-        if not alternatives:
-            alternatives = [r for r in results if r.get("tcode") != best_match.get("tcode")]
+    if has_match:
+        alternatives = [r for r in results if r["tcode"] != best_match["tcode"]]
         return _build_uncertain_reply(best_match, alternatives, confidence_label)
 
     return _build_no_match_reply(results)
 
 
 # -----------------------------------------------------------------------------
-# Public entry point
+# Public entry
 # -----------------------------------------------------------------------------
 def search_tcodes_for_chat(user_message: str) -> Dict[str, Any]:
+
     query = _safe_str(user_message)
 
     if not query:
         return {
-            "reply": "Please enter an SAP business task or an SAP T-code-related question.",
+            "reply": "Please enter an SAP question.",
             "type": "none",
-            "status": "invalid_query",
             "confidence": 0.0,
             "confidence_label": "low",
             "best_match": None,
             "results": [],
-            "alternatives": [],
         }
 
     try:
         try:
-            raw_result = SEARCH_FUNCTION(query, top_k=5)
+            raw = SEARCH_FUNCTION(query, top_k=5)
         except TypeError:
-            raw_result = SEARCH_FUNCTION(query)
+            raw = SEARCH_FUNCTION(query)
 
-        normalized = _normalize_result(raw_result)
-
-        best_match_output: Optional[Dict[str, Any]] = (
-            normalized["best_match"] if normalized["best_match"].get("tcode") else None
-        )
-
-        results = normalized.get("results", [])
-        alternatives = normalized.get("alternatives", [])
-
-        if best_match_output and not alternatives:
-            alternatives = [r for r in results if r.get("tcode") != best_match_output.get("tcode")]
+        best_match = _normalize_match_item(raw.get("best_match"))
+        results = [_normalize_match_item(r) for r in raw.get("results", [])]
 
         reply = build_chat_reply(
             {
-                "type": normalized.get("type", "none"),
-                "status": normalized.get("status"),
-                "message": normalized.get("message", ""),
-                "confidence": normalized.get("confidence", 0.0),
-                "confidence_label": normalized.get("confidence_label", "low"),
-                "best_match": best_match_output,
+                "type": raw.get("type"),
+                "confidence_label": raw.get("confidence_label"),
+                "best_match": best_match,
                 "results": results,
-                "alternatives": alternatives,
             },
             query,
         )
 
         return {
             "reply": reply,
-            "type": normalized.get("type", "none"),
-            "status": normalized.get("status"),
-            "confidence": float(normalized.get("confidence", 0.0) or 0.0),
-            "confidence_label": normalized.get("confidence_label", "low"),
-            "best_match": best_match_output,
+            "type": raw.get("type"),
+            "confidence": raw.get("confidence", 0.0),
+            "confidence_label": raw.get("confidence_label"),
+            "best_match": best_match,
             "results": results,
-            "alternatives": alternatives,
         }
 
-    except Exception as exc:
-        logger.exception("Chat search failed for query: %s", query)
+    except Exception as e:
+        logger.exception("Chat error")
         return {
-            "reply": (
-                "━━━━━━━━━━━━━━━━━━━━━━\n"
-                "SAP ASSISTANT ERROR\n"
-                "━━━━━━━━━━━━━━━━━━━━━━\n"
-                "The SAP chat assistant encountered an internal error while searching.\n"
-                "Please try again or contact the support team.\n"
-                "━━━━━━━━━━━━━━━━━━━━━━"
-            ),
-            "type": "none",
-            "status": "error",
+            "reply": "Internal error in SAP assistant.",
+            "type": "error",
             "confidence": 0.0,
             "confidence_label": "low",
             "best_match": None,
             "results": [],
-            "alternatives": [],
-            "error": str(exc),
         }
