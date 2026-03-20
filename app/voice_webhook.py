@@ -1,31 +1,15 @@
-# app/voice_webhook.py
-"""
-Voice webhook router for SAP T-code Assistant.
-
-Fixes (production-safe for phone demos):
-- NEVER emits literal words like "pause" / "tiny pause" in speech
-- "SAP" is pronounced as letters: "S A P" (like U S A), with a small natural pause before "T-code"
-  achieved by punctuation: "S A P. T-code"
-- T-codes are spoken character-by-character; digits are spoken individually (25 -> "two five", NOT "twenty five")
-- Supports special characters commonly seen in SAP tcodes (/, -, _)
-- Deterministic alias priority + longest contains-match fallback
-- Confidence threshold logic
-- Robust DATA_DIR detection (Render + local)
-- NEW: Module is spoken as letters (MM -> "M M", SD -> "S D") for clarity
-"""
-
 from __future__ import annotations
 
 import csv
 import os
 import re
+import traceback
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
-# Prefer calling search_service directly
 try:
     from app.services.search_service import search_tcode, is_ready as search_is_ready
 except Exception:
@@ -34,6 +18,7 @@ except Exception:
 
 router = APIRouter()
 
+
 # -------------------------
 # Models
 # -------------------------
@@ -41,6 +26,9 @@ router = APIRouter()
 class VoiceWebhookRequest(BaseModel):
     session_id: str = Field(default="unknown")
     transcript: str = Field(default="")
+    message: str = Field(default="")
+    query: str = Field(default="")
+
 
 class VoiceWebhookResponse(BaseModel):
     speech: str
@@ -49,6 +37,7 @@ class VoiceWebhookResponse(BaseModel):
     confidence_label: str = Field(default="low")
     best_match: Optional[Dict] = None
     results: List[Dict] = Field(default_factory=list)
+
 
 # -------------------------
 # Robust DATA_DIR detection
@@ -67,7 +56,9 @@ def detect_data_dir() -> Optional[str]:
             return p
     return None
 
+
 DATA_DIR = detect_data_dir()
+
 
 # -------------------------
 # Alias loading + matching
@@ -79,6 +70,7 @@ _ALIAS_FILES_PRIORITY = [
     ("le_aliases.csv", "LE", 3),
 ]
 
+
 @dataclass(frozen=True)
 class AliasRecord:
     alias: str
@@ -87,9 +79,11 @@ class AliasRecord:
     module: str
     priority: int
 
+
 _alias_map: Dict[str, AliasRecord] = {}
 _alias_loaded: bool = False
 _alias_load_error: Optional[str] = None
+
 
 def _normalize_text(s: str) -> str:
     if not s:
@@ -100,18 +94,20 @@ def _normalize_text(s: str) -> str:
     s = re.sub(r"\s+", " ", s).strip()
     return s
 
+
 def _load_aliases_once() -> None:
     global _alias_loaded, _alias_load_error, _alias_map
 
     if _alias_loaded:
         return
+
     _alias_loaded = True
     _alias_map = {}
     _alias_load_error = None
 
     if not DATA_DIR:
         _alias_load_error = "DATA_DIR not found"
-        print("❌ No valid DATA_DIR detected for alias loading.")
+        print("No valid DATA_DIR detected for alias loading.")
         return
 
     any_loaded = False
@@ -142,33 +138,26 @@ def _load_aliases_once() -> None:
                     )
 
                     prev = _alias_map.get(key)
-                    # lower numeric priority wins (MM=1 is highest)
                     if prev is None or rec.priority < prev.priority:
                         _alias_map[key] = rec
 
             any_loaded = True
-            print(f"✅ Loaded aliases from {filename}: {path}")
+            print(f"Loaded aliases from {filename}: {path}")
 
         except Exception as exc:
             _alias_load_error = f"Failed reading {filename}: {exc}"
-            print(f"❌ Failed to load {filename}: {exc}")
+            print(f"Failed to load {filename}: {exc}")
 
     if not any_loaded:
-        print(f"⚠️ No alias files found in DATA_DIR={DATA_DIR}")
+        print(f"No alias files found in DATA_DIR={DATA_DIR}")
+
 
 def match_alias(transcript: str) -> Optional[Dict]:
-    """
-    Deterministic alias priority:
-    1) exact normalized match
-    2) contains match: choose (highest priority, then longest alias)
-       so phrases like "how do I post goods receipt" still match "post goods receipt"
-    """
     _load_aliases_once()
     user_key = _normalize_text(transcript)
     if not user_key:
         return None
 
-    # 1) Exact match
     rec = _alias_map.get(user_key)
     if rec:
         return {
@@ -180,9 +169,7 @@ def match_alias(transcript: str) -> Optional[Dict]:
             "alias": rec.alias,
         }
 
-    # 2) Contains match (longest wins within priority)
     best: Optional[Tuple[int, int, AliasRecord]] = None
-    # tuple: (priority, -len(alias), rec) -> smaller priority first, longer alias first
     for k, r in _alias_map.items():
         if k and k in user_key:
             cand = (r.priority, -len(k), r)
@@ -202,12 +189,14 @@ def match_alias(transcript: str) -> Optional[Dict]:
         "alias": rec2.alias,
     }
 
+
 # -------------------------
 # Confidence thresholds
 # -------------------------
 
 CONFIDENT_THRESHOLD = float(os.getenv("CONFIDENT_THRESHOLD", "0.70"))
 MEDIUM_THRESHOLD = float(os.getenv("MEDIUM_THRESHOLD", "0.40"))
+
 
 def label_confidence(score: float) -> str:
     if score >= CONFIDENT_THRESHOLD:
@@ -216,50 +205,52 @@ def label_confidence(score: float) -> str:
         return "medium"
     return "low"
 
+
 def response_type_for_score(score: float) -> str:
     return "confident" if score >= MEDIUM_THRESHOLD else "uncertain"
 
+
 # -------------------------
-# TTS helpers (IMPORTANT)
+# TTS helpers
 # -------------------------
-# Small improvement for perfect T-code pronunciation
+
 _DIGITS = "zero one two three four five six seven eight nine".split()
+
 
 def speak_tcode(code: str) -> str:
     code = (code or "").strip().upper()
     out: List[str] = []
     for c in code:
-        if c.isdigit(): out.append(_DIGITS[int(c)])
-        elif c == "/": out.append("slash")
-        elif c == "-": out.append("dash")
-        elif c == "_": out.append("underscore")
-        else: out.append(c)
+        if c.isdigit():
+            out.append(_DIGITS[int(c)])
+        elif c == "/":
+            out.append("slash")
+        elif c == "-":
+            out.append("dash")
+        elif c == "_":
+            out.append("underscore")
+        else:
+            out.append(c)
     return " ".join(out)
 
+
 def speak_letters(s: str) -> str:
-    """
-    MM -> "M M", SD -> "S D", FI -> "F I"
-    Safe for empty strings.
-    """
     s = (s or "").strip().upper()
     if not s:
         return ""
     return " ".join(list(s))
 
+
 def sap_prefix() -> str:
-    # Period creates a natural micro-pause in TTS without speaking the word "pause"
     return "S A P. T-code"
 
+
 def build_speech(best_match: Optional[Dict], results: List[Dict], c_label: str, r_type: str) -> str:
-    """
-    IMPORTANT:
-    - Never include literal instruction words like "pause" or "tiny pause" in the speech text.
-    - Use punctuation for natural pauses.
-    """
     if not best_match:
         return (
             "I couldn’t find a matching S A P transaction code. "
-            "Try saying a task like create purchase order, post goods receipt, or change material."
+            "Try saying a task like create purchase order, create purchase requisition, "
+            "post goods receipt, or change material."
         )
 
     tcode = (best_match.get("tcode") or "").strip()
@@ -275,7 +266,6 @@ def build_speech(best_match: Optional[Dict], results: List[Dict], c_label: str, 
             return f"The {prefix} is {spoken_code}. {desc}. Module {module_spoken}."
         return f"The {prefix} is {spoken_code}. {desc}."
 
-    # Uncertain: give up to 3 options, still spoken cleanly
     opts = []
     for r in results[:3]:
         tc = (r.get("tcode") or "").strip()
@@ -289,11 +279,11 @@ def build_speech(best_match: Optional[Dict], results: List[Dict], c_label: str, 
         opts.append(line)
 
     options = " / ".join(opts) if opts else f"{spoken_code} — {desc}"
+    return f"I found a few close options. {options}. Which one did you mean?"
 
-    return f"I’m not fully confident. The closest options are: {options}. Which one did you mean?"
 
 # -------------------------
-# Auth
+# Helpers
 # -------------------------
 
 def _check_bearer_token(authorization: Optional[str]) -> None:
@@ -312,6 +302,11 @@ def _check_bearer_token(authorization: Optional[str]) -> None:
     if got != expected:
         raise HTTPException(status_code=403, detail="Invalid webhook secret")
 
+
+def _extract_transcript(payload: VoiceWebhookRequest) -> str:
+    return (payload.transcript or payload.message or payload.query or "").strip()
+
+
 # -------------------------
 # Main endpoint
 # -------------------------
@@ -322,10 +317,11 @@ def voice_webhook(
     request: Request,
     authorization: Optional[str] = Header(default=None),
 ) -> VoiceWebhookResponse:
-
     _check_bearer_token(authorization)
 
-    transcript = (payload.transcript or "").strip()
+    transcript = _extract_transcript(payload)
+    print(f"VOICE transcript: {transcript}")
+
     if not transcript:
         return VoiceWebhookResponse(
             speech="Please say what you want to do in S A P, for example: create purchase order.",
@@ -336,10 +332,11 @@ def voice_webhook(
             results=[],
         )
 
-    # 1) Alias (exact/contains) first
+    # 1) Alias first
     alias_hit = match_alias(transcript)
     if alias_hit:
         speech = build_speech(alias_hit, [alias_hit], "high", "confident")
+        print(f"VOICE alias hit: {alias_hit}")
         return VoiceWebhookResponse(
             speech=speech,
             type="confident",
@@ -370,13 +367,17 @@ def voice_webhook(
                 best_match=None,
                 results=[],
             )
-    except Exception:
-        pass
+    except Exception as exc:
+        print(f"VOICE readiness check failed: {exc}")
 
     try:
         search_resp = search_tcode(transcript, top_k=5)
+        print(f"VOICE search response: {search_resp}")
 
-        if isinstance(search_resp, dict) and search_resp.get("status") == "warming_up":
+        if not isinstance(search_resp, dict):
+            search_resp = {"message": str(search_resp)}
+
+        if search_resp.get("status") == "warming_up":
             return VoiceWebhookResponse(
                 speech="One moment — I’m loading the S A P knowledge base.",
                 type="warming_up",
@@ -386,37 +387,68 @@ def voice_webhook(
                 results=[],
             )
 
-        best = None
-        results: List[Dict] = []
-        score = 0.0
+        best = search_resp.get("best_match")
+        results = search_resp.get("results") or []
 
-        if isinstance(search_resp, dict):
-            best = search_resp.get("best_match")
-            results = search_resp.get("results") or []
-            score = float(search_resp.get("confidence", 0.0) or 0.0)
+        if not isinstance(results, list):
+            results = []
+
+        if not best and results and isinstance(results[0], dict):
+            best = results[0]
+
+        score_raw = search_resp.get("confidence", 0.0)
+        try:
+            score = float(score_raw or 0.0)
+        except Exception:
+            score = 0.0
+
+        # Prefer returned type if available
+        r_type = search_resp.get("type")
+        if r_type not in {"confident", "uncertain", "none", "warming_up", "error"}:
+            r_type = "confident" if best else "none"
 
         c_label = label_confidence(score)
-        r_type = response_type_for_score(score)
 
         if best and isinstance(best, dict):
-            best = {**best, "match_type": "semantic"}
+            best = {**best, "match_type": best.get("match_type") or "semantic"}
 
-        if results and isinstance(results, list):
-            results = [{**r, "match_type": "semantic"} for r in results if isinstance(r, dict)]
+        normalized_results: List[Dict] = []
+        for r in results:
+            if isinstance(r, dict):
+                normalized_results.append({**r, "match_type": r.get("match_type") or "semantic"})
 
-        speech = build_speech(best, results, c_label, r_type)
+        # Build spoken answer primarily from best match
+        if best:
+            speech = build_speech(best, normalized_results, c_label, "confident")
+            return VoiceWebhookResponse(
+                speech=speech,
+                type="confident",
+                confidence=round(score, 3),
+                confidence_label=c_label,
+                best_match=best,
+                results=normalized_results,
+            )
+
+        # Fallback to backend text if no best_match exists
+        backend_speech = (
+            search_resp.get("speech")
+            or search_resp.get("answer")
+            or search_resp.get("message")
+            or "I could not find a matching S A P transaction code."
+        )
 
         return VoiceWebhookResponse(
-            speech=speech,
-            type=r_type if best else "none",
+            speech=str(backend_speech),
+            type=r_type,
             confidence=round(score, 3),
             confidence_label=c_label,
-            best_match=best,
-            results=results,
+            best_match=None,
+            results=normalized_results,
         )
 
     except Exception as exc:
         print("voice_webhook error:", repr(exc))
+        print(traceback.format_exc())
         return VoiceWebhookResponse(
             speech="Sorry, I’m having trouble reaching the S A P assistant right now. Please try again.",
             type="error",
@@ -425,6 +457,7 @@ def voice_webhook(
             best_match=None,
             results=[],
         )
+
 
 @router.get("/voice-webhook/health")
 def voice_webhook_health():
