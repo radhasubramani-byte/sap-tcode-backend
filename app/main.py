@@ -1,150 +1,240 @@
-# app/main.py
-import os
-import threading
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
-from fastapi import FastAPI, Query
-from fastapi.responses import JSONResponse, HTMLResponse
-
-# Search service (semantic)
-from app.services.search_service import initialize_search, is_ready, search_tcode
-
-app = FastAPI(title="SAP Tcode Backend", version="1.0.0")
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+import uvicorn
 
 
-# ----------------------------
-# Startup: warm up search index
-# ----------------------------
-@app.on_event("startup")
-def _startup() -> None:
-    # Do NOT block startup; run embeddings/index build in background.
-    def _bg_init():
-        try:
-            initialize_search()
-        except Exception as e:
-            print("❌ initialize_search() failed:", repr(e))
-
-    t = threading.Thread(target=_bg_init, daemon=True)
-    t.start()
+# =========================================================
+# CONFIG
+# =========================================================
+FRONTEND_ORIGINS = [
+    "https://sap-tcode-frontend.vercel.app",   # replace this
+    "http://localhost:3000",
+    "http://127.0.0.1:5500",
+    "http://localhost:5500",
+]
 
 
-# ----------------------------
-# Basic routes
-# ----------------------------
+# =========================================================
+# FASTAPI APP
+# =========================================================
+app = FastAPI(
+    title="SAP T-Code Assistant API",
+    version="1.0.0",
+    description="Chat API for SAP T-code assistant frontend and integrations."
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=FRONTEND_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# =========================================================
+# REQUEST / RESPONSE MODELS
+# =========================================================
+class ChatRequest(BaseModel):
+    query: str
+
+
+class SearchRequest(BaseModel):
+    query: str
+
+
+# =========================================================
+# SEARCH SERVICE ADAPTER
+# Tries multiple possible function names from your existing
+# app/services/search_service.py so you do not have to refactor
+# the whole backend immediately.
+# =========================================================
+def _load_search_callable() -> Callable[[str], Any]:
+    try:
+        import app.services.search_service as search_service_module
+    except Exception as exc:
+        raise RuntimeError(
+            "Could not import app.services.search_service. "
+            "Make sure your search service file exists."
+        ) from exc
+
+    candidate_names = [
+        "search_tcode",
+        "search",
+        "find_tcode",
+        "find_best_match",
+        "query_tcode",
+        "run_search",
+    ]
+
+    for name in candidate_names:
+        fn = getattr(search_service_module, name, None)
+        if callable(fn):
+            return fn
+
+    raise RuntimeError(
+        "No usable search function found in app.services.search_service. "
+        "Expected one of: search_tcode, search, find_tcode, "
+        "find_best_match, query_tcode, run_search"
+    )
+
+
+def _normalize_result(query: str, raw: Any) -> Dict[str, Any]:
+    """
+    Normalizes many possible service return formats into one stable API shape.
+    """
+
+    if raw is None:
+        return {
+            "query": query,
+            "answer": "No result found.",
+            "speech": "I could not find a matching SAP T-code for that request.",
+            "confidence": None,
+            "confidence_label": "low",
+            "best_match": None,
+            "results": [],
+        }
+
+    # If service already returns a dict, adapt it
+    if isinstance(raw, dict):
+        speech = raw.get("speech")
+        answer = (
+            raw.get("answer")
+            or raw.get("message")
+            or raw.get("response")
+            or speech
+        )
+
+        best_match = raw.get("best_match")
+        results = raw.get("results", [])
+
+        # Try to derive best_match from results if missing
+        if not best_match and isinstance(results, list) and results:
+            best_match = results[0]
+
+        # If no answer but there is a best match, build one
+        if not answer and isinstance(best_match, dict):
+            code = best_match.get("tcode") or best_match.get("code") or best_match.get("t_code")
+            desc = best_match.get("description") or best_match.get("task") or best_match.get("text")
+            module = best_match.get("module")
+            if code and desc and module:
+                answer = f"The recommended SAP T-code is {code} for {desc} in module {module}."
+            elif code and desc:
+                answer = f"The recommended SAP T-code is {code} for {desc}."
+            elif code:
+                answer = f"The recommended SAP T-code is {code}."
+
+        if not speech:
+            speech = answer or "No result found."
+
+        return {
+            "query": query,
+            "answer": answer or "No result found.",
+            "speech": speech,
+            "confidence": raw.get("confidence"),
+            "confidence_label": raw.get("confidence_label"),
+            "best_match": best_match,
+            "results": results if isinstance(results, list) else [],
+            "type": raw.get("type"),
+        }
+
+    # If service returns a list, assume list of matches
+    if isinstance(raw, list):
+        best_match = raw[0] if raw else None
+        answer = "No result found."
+        if isinstance(best_match, dict):
+            code = best_match.get("tcode") or best_match.get("code") or best_match.get("t_code")
+            desc = best_match.get("description") or best_match.get("task") or best_match.get("text")
+            module = best_match.get("module")
+            if code and desc and module:
+                answer = f"The recommended SAP T-code is {code} for {desc} in module {module}."
+            elif code and desc:
+                answer = f"The recommended SAP T-code is {code} for {desc}."
+            elif code:
+                answer = f"The recommended SAP T-code is {code}."
+
+        return {
+            "query": query,
+            "answer": answer,
+            "speech": answer,
+            "confidence": None,
+            "confidence_label": None,
+            "best_match": best_match,
+            "results": raw,
+            "type": "search_results",
+        }
+
+    # Fallback for string/object output
+    text = str(raw)
+    return {
+        "query": query,
+        "answer": text,
+        "speech": text,
+        "confidence": None,
+        "confidence_label": None,
+        "best_match": None,
+        "results": [],
+        "type": "text",
+    }
+
+
+def run_search(query: str) -> Dict[str, Any]:
+    try:
+        search_fn = _load_search_callable()
+        raw = search_fn(query)
+        return _normalize_result(query, raw)
+    except RuntimeError:
+        raise
+    except Exception as exc:
+        raise RuntimeError(f"Search service execution failed: {exc}") from exc
+
+
+# =========================================================
+# ROUTES
+# =========================================================
 @app.get("/")
-def root() -> Dict[str, Any]:
+def root() -> Dict[str, str]:
     return {
         "status": "ok",
-        "service": "sap-tcode-backend",
-        "ready": bool(is_ready()),
-        "interfaces": {
-            "voice": "enabled",
-            "chat": "enabled",
-            "chat_ui": "enabled",
-        },
+        "message": "SAP T-Code Assistant backend is running."
     }
 
 
 @app.get("/health")
-def health() -> Dict[str, Any]:
-    return {"ok": True, "ready": bool(is_ready())}
+def health() -> Dict[str, str]:
+    return {"status": "healthy"}
 
 
-# ----------------------------
-# Chat UI route
-# ----------------------------
-@app.get("/chat-ui", response_class=HTMLResponse)
-def chat_ui():
+@app.post("/chat")
+def chat(request: ChatRequest) -> Dict[str, Any]:
+    query = request.query.strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="Query cannot be empty.")
+
     try:
-        file_path = os.path.join(os.path.dirname(__file__), "static", "chat.html")
-        with open(file_path, "r", encoding="utf-8") as f:
-            return HTMLResponse(content=f.read())
-    except Exception as e:
-        return HTMLResponse(
-            content=f"<h3>Failed to load chat UI: {str(e)}</h3>",
-            status_code=500,
-        )
+        return run_search(query)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-# ----------------------------
-# SEARCH ENDPOINT
-# Existing shared backend search endpoint
-# ----------------------------
-@app.get("/search-tcode")
-def search_tcode_endpoint(
-    q: str = Query(..., description="User query"),
-    top_k: int = Query(5, ge=1, le=20, description="Number of results"),
-) -> JSONResponse:
+@app.post("/search-tcode")
+def search_tcode(request: SearchRequest) -> Dict[str, Any]:
+    query = request.query.strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="Query cannot be empty.")
+
     try:
-        resp = search_tcode(q, top_k=top_k)
-        return JSONResponse(content=resp)
-    except Exception as e:
-        print("❌ /search-tcode error:", repr(e))
-        return JSONResponse(
-            status_code=500,
-            content={"status": "error", "message": "search failed"},
-        )
+        return run_search(query)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-# ----------------------------
-# Mount voice webhook routes (defensive)
-# Supports either:
-#   - voice_webhook.py defines `router` (FastAPI APIRouter)
-#   - voice_webhook.py defines `mount_*` or `register_*` function
-# ----------------------------
-def _mount_voice_routes() -> None:
-    try:
-        from app.voice_webhook import router as voice_router  # type: ignore
-
-        app.include_router(voice_router)
-        print("✅ Mounted voice webhook routes (router)")
-        return
-    except Exception as e:
-        print("ℹ️ voice router import failed:", repr(e))
-
-    for fn_name in ("mount_voice_routes", "register_voice_routes", "register_voice_webhook_routes"):
-        try:
-            mod = __import__("app.voice_webhook", fromlist=[fn_name])
-            fn = getattr(mod, fn_name, None)
-            if callable(fn):
-                fn(app)
-                print(f"✅ Mounted voice webhook routes ({fn_name})")
-                return
-        except Exception:
-            continue
-
-    print("ℹ️ voice webhook module found but no router/mount function detected (skipping)")
-
-
-# ----------------------------
-# Mount chat webhook routes (defensive)
-# Supports either:
-#   - chat_webhook.py defines `router` (FastAPI APIRouter)
-#   - chat_webhook.py defines `mount_*` or `register_*` function
-# ----------------------------
-def _mount_chat_routes() -> None:
-    try:
-        from app.chat_webhook import router as chat_router  # type: ignore
-
-        app.include_router(chat_router)
-        print("✅ Mounted chat webhook routes (router)")
-        return
-    except Exception as e:
-        print("ℹ️ chat router import failed:", repr(e))
-
-    for fn_name in ("mount_chat_routes", "register_chat_routes", "register_chat_webhook_routes"):
-        try:
-            mod = __import__("app.chat_webhook", fromlist=[fn_name])
-            fn = getattr(mod, fn_name, None)
-            if callable(fn):
-                fn(app)
-                print(f"✅ Mounted chat webhook routes ({fn_name})")
-                return
-        except Exception:
-            continue
-
-    print("ℹ️ chat webhook module found but no router/mount function detected (skipping)")
-
-
-_mount_voice_routes()
-_mount_chat_routes()
+# =========================================================
+# LOCAL RUN
+# Render will ignore this and use its own start command.
+# =========================================================
+if __name__ == "__main__":
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
