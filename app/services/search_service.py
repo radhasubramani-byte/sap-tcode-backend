@@ -1,6 +1,11 @@
 """
 Production-safe semantic search service for SAP T-codes.
 
+Search priority:
+1. Exact / lexical description match from metadata
+2. Alias match
+3. Semantic search fallback
+
 Exposes:
 - initialize_search()  -> lazy initialization (call on startup in background)
 - is_ready()           -> bool (if embeddings/index ready)
@@ -27,6 +32,9 @@ except Exception:
     embed_query = None
 
 
+# -------------------------
+# Global runtime state
+# -------------------------
 _index: Optional[np.ndarray] = None
 _metadata: Optional[List[Dict]] = None
 _ready: bool = False
@@ -36,10 +44,21 @@ _index_lock = threading.Lock()
 _alias_patterns: List[Dict] = []
 _tcode_index_map: Dict[str, Dict] = {}
 
-_EMBED_PATH = "/app/data/embeddings.npy" if os.path.isdir("/app/data") else "data/embeddings.npy"
-_DATA_DIR = "/app/data" if os.path.isdir("/app/data") else "data"
+# Prefer the actual Render path that your logs showed, then fall back
+if os.path.isdir("/app/app/data"):
+    _DATA_DIR = "/app/app/data"
+    _EMBED_PATH = "/app/app/data/embeddings.npy"
+elif os.path.isdir("/app/data"):
+    _DATA_DIR = "/app/data"
+    _EMBED_PATH = "/app/data/embeddings.npy"
+else:
+    _DATA_DIR = "data"
+    _EMBED_PATH = "data/embeddings.npy"
 
 
+# -------------------------
+# Utilities
+# -------------------------
 def is_ready() -> bool:
     return _ready
 
@@ -78,7 +97,115 @@ def _normalize_text_for_match(s: str) -> str:
     return s
 
 
+# -------------------------
+# Description matcher
+# -------------------------
+def _normalize_desc_text(s: str) -> str:
+    if not s:
+        return ""
+    s = s.lower().strip()
+    s = re.sub(r"[^a-z0-9\s]", " ", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+
+def _find_description_matches(query: str, top_k: int = 5) -> List[Dict]:
+    """
+    Deterministic lexical matching against metadata descriptions.
+
+    Priority:
+    1) exact normalized description match
+    2) query contained in description
+    3) strong token overlap match
+    """
+    global _metadata
+
+    if not query or not _metadata:
+        return []
+
+    q = _normalize_desc_text(query)
+    if not q:
+        return []
+
+    q_tokens = set(q.split())
+
+    exact_matches: List[Dict] = []
+    contains_matches: List[Dict] = []
+    overlap_matches: List[Dict] = []
+
+    for row in _metadata:
+        if not isinstance(row, dict):
+            continue
+
+        desc = (row.get("description") or "").strip()
+        desc_norm = _normalize_desc_text(desc)
+        if not desc_norm:
+            continue
+
+        tcode = row.get("tcode")
+        module = row.get("module")
+
+        # 1) Exact description match
+        if desc_norm == q:
+            exact_matches.append(
+                {
+                    "tcode": tcode,
+                    "description": desc,
+                    "module": module,
+                    "score": 1.0,
+                    "match_type": "description_exact",
+                }
+            )
+            continue
+
+        # 2) Contains match
+        if q in desc_norm:
+            contains_matches.append(
+                {
+                    "tcode": tcode,
+                    "description": desc,
+                    "module": module,
+                    "score": 0.95,
+                    "match_type": "description_contains",
+                }
+            )
+            continue
+
+        # 3) Token overlap match
+        d_tokens = set(desc_norm.split())
+        overlap = q_tokens.intersection(d_tokens)
+        if overlap:
+            ratio = len(overlap) / max(len(q_tokens), 1)
+            if ratio >= 0.6:
+                overlap_matches.append(
+                    {
+                        "tcode": tcode,
+                        "description": desc,
+                        "module": module,
+                        "score": round(0.75 + (0.2 * ratio), 6),
+                        "match_type": "description_overlap",
+                    }
+                )
+
+    if exact_matches:
+        return exact_matches[:top_k]
+
+    if contains_matches:
+        contains_matches.sort(key=lambda x: x.get("score", 0.0), reverse=True)
+        return contains_matches[:top_k]
+
+    overlap_matches.sort(key=lambda x: x.get("score", 0.0), reverse=True)
+    return overlap_matches[:top_k]
+
+
+# -------------------------
+# Alias loader / matcher
+# -------------------------
 def load_alias_patterns() -> None:
+    """
+    Load any *_aliases.csv files from the data directory.
+    Expected CSV format: alias,tcode,canonical_desc
+    """
     global _alias_patterns
     _alias_patterns = []
 
@@ -96,6 +223,7 @@ def load_alias_patterns() -> None:
                 reader = csv.reader(fh)
                 rows = list(reader)
                 start_idx = 0
+
                 if rows and len(rows[0]) >= 1 and any("alias" in c.lower() for c in rows[0]):
                     start_idx = 1
 
@@ -184,6 +312,9 @@ def _find_alias_matches(query: str) -> List[Dict]:
     return matches
 
 
+# -------------------------
+# Initialization
+# -------------------------
 def initialize_search() -> None:
     global _index, _metadata, _ready, _tcode_index_map, _init_started
 
@@ -276,6 +407,9 @@ def initialize_search() -> None:
         _ready = False
 
 
+# -------------------------
+# Response builders
+# -------------------------
 def build_response_with_confidence(results: List[Dict]) -> Dict:
     if not results:
         return {
@@ -310,6 +444,38 @@ def build_response_with_confidence(results: List[Dict]) -> Dict:
     }
 
 
+def build_did_you_mean_response(results: List[Dict]) -> Dict:
+    """
+    Safe fallback when semantic confidence is too low.
+    Returns suggestions instead of a possibly wrong best match.
+    """
+    cleaned_results = []
+    for r in results[:3]:
+        if isinstance(r, dict):
+            cleaned_results.append(
+                {
+                    "tcode": r.get("tcode"),
+                    "description": r.get("description"),
+                    "module": r.get("module"),
+                    "score": r.get("score"),
+                    "match_type": r.get("match_type", "semantic"),
+                }
+            )
+
+    return {
+        "type": "uncertain",
+        "message": "Did you mean one of these SAP T-codes?",
+        "best_match": None,
+        "alternatives": cleaned_results,
+        "results": cleaned_results,
+        "confidence": 0.0,
+        "confidence_label": "low",
+    }
+
+
+# -------------------------
+# Semantic search
+# -------------------------
 def _cosine_search(q_emb: np.ndarray, top_k: int = 5) -> List[Tuple[int, float]]:
     global _index
     if _index is None or _index.size == 0:
@@ -323,12 +489,21 @@ def _cosine_search(q_emb: np.ndarray, top_k: int = 5) -> List[Tuple[int, float]]
     return [(int(i), float(scores[i])) for i in top_indices]
 
 
+# -------------------------
+# Public search function
+# -------------------------
 def search_tcode(query: str, top_k: int = 5) -> Dict:
     global _index, _metadata, _ready, _tcode_index_map
 
     if not query or not query.strip():
         return {"status": "invalid_query", "message": "Query cannot be empty"}
 
+    # 1) Description match FIRST
+    description_matches = _find_description_matches(query, top_k=top_k)
+    if description_matches:
+        return build_response_with_confidence(description_matches)
+
+    # 2) Alias match SECOND
     alias_matches = _find_alias_matches(query)
     if alias_matches:
         results = []
@@ -337,17 +512,18 @@ def search_tcode(query: str, top_k: int = 5) -> Dict:
             meta = _tcode_index_map.get(tcode, {}) if tcode else {}
             desc = meta.get("description") or m.get("description")
             module = meta.get("module") or meta.get("module_name") or None
-
             results.append(
                 {
                     "tcode": tcode,
                     "description": desc,
                     "module": module,
                     "score": round(float(m.get("score", 0.9)), 6),
+                    "match_type": "alias",
                 }
             )
         return build_response_with_confidence(results)
 
+    # 3) Semantic fallback
     if not _ready or _index is None:
         return {
             "status": "warming_up",
@@ -364,6 +540,7 @@ def search_tcode(query: str, top_k: int = 5) -> Dict:
     try:
         matches = _cosine_search(q_emb, top_k=top_k)
         results = []
+
         for idx, score in matches:
             item = _metadata[idx] if (_metadata and idx < len(_metadata)) else {}
             results.append(
@@ -372,10 +549,18 @@ def search_tcode(query: str, top_k: int = 5) -> Dict:
                     "description": item.get("description") if isinstance(item, dict) else None,
                     "module": item.get("module") if isinstance(item, dict) else None,
                     "score": round(float(score), 6),
+                    "match_type": "semantic",
                 }
             )
 
-        return build_response_with_confidence(results)
+        response = build_response_with_confidence(results)
+
+        # Safety guard:
+        # if semantic confidence is too low, return suggestions instead of a wrong answer
+        if response.get("confidence", 0.0) < 0.5:
+            return build_did_you_mean_response(results)
+
+        return response
 
     except Exception as exc:
         print(f"Search runtime error: {exc}")
