@@ -1,29 +1,26 @@
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict
+import threading
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
 
+from app.services.search_service import initialize_search, is_ready
 
-# =========================================================
-# CONFIG
-# =========================================================
+
 FRONTEND_ORIGINS = [
-    "https://sap-tcode-frontend.vercel.app",   # replace this
+    "https://sap-tcode-frontend.vercel.app",
     "http://localhost:3000",
     "http://127.0.0.1:5500",
     "http://localhost:5500",
 ]
 
 
-# =========================================================
-# FASTAPI APP
-# =========================================================
 app = FastAPI(
     title="SAP T-Code Assistant API",
     version="1.0.0",
-    description="Chat API for SAP T-code assistant frontend and integrations."
+    description="Chat API for SAP T-code assistant frontend and integrations.",
 )
 
 app.add_middleware(
@@ -35,9 +32,6 @@ app.add_middleware(
 )
 
 
-# =========================================================
-# REQUEST / RESPONSE MODELS
-# =========================================================
 class ChatRequest(BaseModel):
     query: str
 
@@ -46,12 +40,13 @@ class SearchRequest(BaseModel):
     query: str
 
 
-# =========================================================
-# SEARCH SERVICE ADAPTER
-# Tries multiple possible function names from your existing
-# app/services/search_service.py so you do not have to refactor
-# the whole backend immediately.
-# =========================================================
+@app.on_event("startup")
+def startup_event() -> None:
+    thread = threading.Thread(target=initialize_search, daemon=True)
+    thread.start()
+    print("Background search initialization started")
+
+
 def _load_search_callable() -> Callable[[str], Any]:
     try:
         import app.services.search_service as search_service_module
@@ -83,10 +78,6 @@ def _load_search_callable() -> Callable[[str], Any]:
 
 
 def _normalize_result(query: str, raw: Any) -> Dict[str, Any]:
-    """
-    Normalizes many possible service return formats into one stable API shape.
-    """
-
     if raw is None:
         return {
             "query": query,
@@ -96,30 +87,24 @@ def _normalize_result(query: str, raw: Any) -> Dict[str, Any]:
             "confidence_label": "low",
             "best_match": None,
             "results": [],
+            "type": "none",
         }
 
-    # If service already returns a dict, adapt it
     if isinstance(raw, dict):
         speech = raw.get("speech")
-        answer = (
-            raw.get("answer")
-            or raw.get("message")
-            or raw.get("response")
-            or speech
-        )
+        answer = raw.get("answer") or raw.get("message") or raw.get("response") or speech
 
         best_match = raw.get("best_match")
         results = raw.get("results", [])
 
-        # Try to derive best_match from results if missing
         if not best_match and isinstance(results, list) and results:
             best_match = results[0]
 
-        # If no answer but there is a best match, build one
         if not answer and isinstance(best_match, dict):
             code = best_match.get("tcode") or best_match.get("code") or best_match.get("t_code")
             desc = best_match.get("description") or best_match.get("task") or best_match.get("text")
             module = best_match.get("module")
+
             if code and desc and module:
                 answer = f"The recommended SAP T-code is {code} for {desc} in module {module}."
             elif code and desc:
@@ -139,16 +124,19 @@ def _normalize_result(query: str, raw: Any) -> Dict[str, Any]:
             "best_match": best_match,
             "results": results if isinstance(results, list) else [],
             "type": raw.get("type"),
+            "status": raw.get("status"),
+            "ready": is_ready(),
         }
 
-    # If service returns a list, assume list of matches
     if isinstance(raw, list):
         best_match = raw[0] if raw else None
         answer = "No result found."
+
         if isinstance(best_match, dict):
             code = best_match.get("tcode") or best_match.get("code") or best_match.get("t_code")
             desc = best_match.get("description") or best_match.get("task") or best_match.get("text")
             module = best_match.get("module")
+
             if code and desc and module:
                 answer = f"The recommended SAP T-code is {code} for {desc} in module {module}."
             elif code and desc:
@@ -165,9 +153,9 @@ def _normalize_result(query: str, raw: Any) -> Dict[str, Any]:
             "best_match": best_match,
             "results": raw,
             "type": "search_results",
+            "ready": is_ready(),
         }
 
-    # Fallback for string/object output
     text = str(raw)
     return {
         "query": query,
@@ -178,6 +166,7 @@ def _normalize_result(query: str, raw: Any) -> Dict[str, Any]:
         "best_match": None,
         "results": [],
         "type": "text",
+        "ready": is_ready(),
     }
 
 
@@ -192,20 +181,21 @@ def run_search(query: str) -> Dict[str, Any]:
         raise RuntimeError(f"Search service execution failed: {exc}") from exc
 
 
-# =========================================================
-# ROUTES
-# =========================================================
 @app.get("/")
-def root() -> Dict[str, str]:
+def root() -> Dict[str, Any]:
     return {
         "status": "ok",
-        "message": "SAP T-Code Assistant backend is running."
+        "message": "SAP T-Code Assistant backend is running.",
+        "search_ready": is_ready(),
     }
 
 
 @app.get("/health")
-def health() -> Dict[str, str]:
-    return {"status": "healthy"}
+def health() -> Dict[str, Any]:
+    return {
+        "status": "healthy",
+        "search_ready": is_ready(),
+    }
 
 
 @app.post("/chat")
@@ -232,9 +222,5 @@ def search_tcode(request: SearchRequest) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-# =========================================================
-# LOCAL RUN
-# Render will ignore this and use its own start command.
-# =========================================================
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
