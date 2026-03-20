@@ -7,6 +7,7 @@ from pydantic import BaseModel
 import uvicorn
 
 from app.services.search_service import initialize_search, is_ready
+from app.voice_webhook import router as voice_router
 
 
 FRONTEND_ORIGINS = [
@@ -22,6 +23,9 @@ app = FastAPI(
     version="1.0.0",
     description="Chat API for SAP T-code assistant frontend and integrations.",
 )
+
+# Register voice webhook routes
+app.include_router(voice_router)
 
 app.add_middleware(
     CORSMiddleware,
