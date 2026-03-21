@@ -1,0 +1,1302 @@
+tcode,description,module
+/EBY/ICIV_ACCR_REP,PDAP/ICS Accrual Report,FI
+/PERSONAS/LAUNCH,Personas Flavor Launcher,FI
+/SAPPO/PPO3,Display Postprocessing Order,BC
+/SAPSLL/BL_DOC_MM_R3,GTS: LCI: Blocked MM Docmts,GTS
+/SAPSLL/CUS_INV_R3,GTS: Shipment Consolidation,GTS
+6KEA,Profit Center: Display Changes,FI
+AR01,Call Asset List,FI
+AS03,Display Asset Master Record,FI
+AUVA,FI-AA Incomplete Assets,FI
+AW01N,Asset Explorer,FI
+BMBC,Batch Information Cockpit,PP
+BMC3,Display Class (Class Type 'BATCH'),PP
+BP,Maintain Business Partner,FI
+BPCD,Business Partner: Change Documents,FI
+C203,Display Master Recipe,PP
+C223_D,Display Production Version,PP
+C261,Change Document Display Master Rec.,PP
+CA81,Master recipe usage and resources,PP
+CC03,Display Change Master,PP
+CC04,Display Product Structure,PP
+CC05,Change overview,PP
+CC07,Engineering Change Mgmt information,PP
+CC13,Display Material Revision Level,PP
+CC16,Display Document Revision Level,PP
+CC23,Display Object Management Record,PP
+CC33,Display Change Request,PP
+CC60,Browser hierarchy,PP
+CDESK,CAD Desktop,PLM
+CFM4,Display Integration Models,PP
+CG02,Substance Workbench,PP
+CG02BD,Specification Workbench,PP
+CG13,Display Phrases,PP
+CG54,Report Information System,PP
+CK13,Display Product Cost Estimate,CO
+CK13N,Display Material Cost Estimate,CO
+CK33,Comparison of Itemizations,CO
+CK76N,Display Additive Costs,CO
+CK80_99,Material: Cost Components,FI
+CK84_99,Material: Itemization,CO
+CK84_99_COST_ELEMENT,Cost Elements,CO
+CK86_99,Material: Multilevel BOM,FI
+CK88_99,Material: Partner Cost Comp. Split,FI
+CK95,Display Mixing Ratios,CO
+CKAPP01,Materials To Be Costed,CO
+CKM3,Material Price Analysis,FI
+CKM3N,Material Price Analysis,FI
+CKMACD,Value Flow Display f. Activity Types,FI
+CKMB,Display Material Ledger Document,FI
+CKMCCD,ManChang: Display Actual CC Split,FI
+CKMDUVSHOW,Display Inventory and Activity Diff.,FI
+CKMH,Single-Level Price Determination,FI
+CKMJ,Display Organizational Measures,FI
+CKMLMV_CA,Edit Controlling Level,CO
+CKMLQS,Valuated Quantity Structure(M-level),FI
+CKMLSTATUS,Materials by Period Status,FI
+CKMREDWIP,Value Flow Display for Reduced WIP,FI
+CKMTOPPRICEDIF,Mat. with Highest MAP Difference,FI
+CKMTOPSTOCKVAL,Materials w/ Highest Inventory Value,FI
+CKMVFM,Value Flow Monitor,FI
+CL03,Display Class,CO
+CL30N,Find Objects in Classes,CO
+CL31,Find Object In Class Type,CO
+CMXSV,Standard XStep Repository,CO
+CO_ARCH_PISHEET,Archive PI Sheets,PP
+CO06,Backorder Processing,CO
+CO09,Availability Overview,PP
+CO24,MissingPartsInfoSyst,CO
+CO52,Evaluate Process Data,CO
+CO53,Control Recipe Monitor,PP
+CO54,Message Monitor,PP
+CO57,Create Message Manually,PP
+CO60,Find PI Sheet,PP
+CO69,Create Message Automatically,PP
+COB3,Display batch search strategy- prod.,PP
+COCR_PROF,Assign Standard XStep Profile,PP
+COHVPI,Mass Processing: Process Orders,PP
+COID,Select Object Detail Lists in PP-PI,PP
+COIO,Order Info System for PP-PI,PP
+COMLWIPDISP,Trans. For Prog. Display_WIP_OBJ_M,FI
+COMLWIPDOC,Display WIP Quantities Document,FI
+COOISPI,Process Order Information System,PP
+COOPC1,Define Settings for SAP ODA,PP
+COPD,Print Process Order,PP
+COPI,Print Process Order ShopFloor Papers,PP
+COR1,Create Process Order,PP
+COR2,Change Process Order,PP
+COR3,Display Process Order,PP
+COR6,Single Process Order Confirmation,PP
+COR7,Convert Planned Order to Proc. Order,PP
+CORA,Process Order: Schedule Ext. Relshps,PP
+CORK,Process Order Confirmations (Total),PP
+CORO,Create Process Order w/o Material,PP
+CORT,Display Process Order Confirmation,PP
+CR13,Display Capacity,PP
+CR33,Display Hierarchy,PP
+CRC3,Display Resource,PP
+CRQ3,Display work center,PP
+CS03,Display Material BOM,PP
+CS11,Display BOM Level by Level,PP
+CS12,Multilevel BOM,PP
+CS13,Summarized BOM,PP
+CS14,BOM Comparison,PP
+CS15,Single-Level Where-Used List,PP
+CS63,Display Order BOM,PP
+CV01N,Create Document,PLM
+CV02N,Change Document,PLM
+CV03N,Display document,PP
+CV04N,Find Document,PP
+CV11,Create Document Structure,PLM
+CV12,Change Document Structure,PLM
+CV13,Display Document Structure,PP
+DGP3,Display Dangerous Goods Master,PP
+DGP7,Display import logs,PP
+DGR1,Displaying DG master data,PP
+DGR4,Display DG Packaging Data,PP
+DGSD,Display Report Logs,PP
+DMS_CONV01,Document Start Conversion,PLM
+DVR3,Display Derivation Recipient Record,PP
+DVS3,Display Derivation Sender Record,PP
+EWCT,Currency Test Converter,FI
+F.14,ABAP/4 Report: Recurring Entries,FI
+F.15,ABAP/4 Report: List Recurr.Entries,FI
+F.18,ABAP/4 Report: Vend.Bal.Confirmation,FI
+F.23,A/R: Account Balances,FI
+F.62,Correspondence: Print Int.Documents,FI
+F8BT,Display Payment Requests,FI
+F960,Application Log Cash Concentration,FI
+F961,Application Log FI Transfer,FI
+F962,Application Log Balance Sheet Prep.,FI
+F970,Account Balances,FI
+F970_VAL,Balance List on Key Date,FI
+F973,Display reconcil. balance list 1,FI
+F974,Display reconcil. balance list 2,FI
+F97A,Overview of BCA Reconciliation Keys,FI
+F97A1,Reconciliation key detail display,FI
+F97AT,Audit trail,FI
+F97E,Recon. to reconciliation key,FI
+F97G,Statement FI Document/BCA Posting,FI
+F97I,Reconciliation BCA /SAP FI Balances,FI
+F97J,Appl. log bal.sh. prep.(backdated),FI
+F992,Application Log Account Balancing,FI
+F999,Interest scale,FI
+F9H3,Display Account Hierarchy,FI
+F9I3,Display Payment Order,FI
+F9I7,Display Payment Item,FI
+F9K3,Display Account,FI
+F9KE,Application Log Account Closure,FI
+F9N10,Overview End of Day Processing,FI
+F9N3,Application Log Bank Statement,FI
+FAGLB03,Display Balances,FI
+FAGLL03,G/L Account Line Items (New),FI
+FB03,Display Document,FI
+FB03L,Document Display : G/L View,FI
+FB04,Document Changes,FI
+FB12,Correspondence Request,FI
+FB41,Post Tax Payable,FI
+FBD3,Display Recurring Entry,FI
+FBD4,Display Recurring Entry Changes,FI
+FBL1,Display Vendor Line Items,FI
+FBL1N,Vendor Line Items,FI
+FBL3,Display G/L Account Line Items,FI
+FBL5N,Customer Line Items,FI
+FBPM2,Status Report,FI
+FBU3,Display Intercompany Document,FI
+FBV3,Display Parked Document,FI
+FBV5,Document Changes of Parked Documents,FI
+FCC4,Payment Cards: Display Logs,FI
+FD03,Display Customer (Accounting),FI
+FD33,Display Customer Credit Management,FI
+FF.6,Display Electronic Bank Statement,FI
+FF.7,Compare Payment Advices,FI
+FF/9,Compare Advices with Bank Statement,FI
+FF_6,Display Electronic Bank Statement,FI
+FF-3,Cash Management Summary Records,FI
+FF-4,CMF Data In Accounting Documents,FI
+FF-7,Planned Item Journal,FI
+FF7A,Cash Position,FI
+FF7B,Liquidity forecast,FI
+FF-8,Payment Advice Journal,FI
+FFA1,Compare Advices with Bk.Stmt Advices,FI
+FGI0,Execute Report,FI
+FGI3,Display Report,FI
+FI03,Display Bank,FI
+FI04,Display Bank Changes,FI
+FK03,Display Vendor (Accounting),FI
+FK10N,Vendor Balance Display,FI
+FS03,Display Master Record,FI
+FS04,G/L Account Changes (Centrally),FI
+FS10N,Balance Display,FI
+FSEPA_M3,SEPA: Display Mandate,FI
+FSP4,G/L Account Changes in Chart/Accts,FI
+FSS4,G/L Account Changes in Company Code,FI
+FTR_ALERT,Financial Transaction: Alert Monitor,FI
+FTXA,Display Tax Code,FI
+GCAC,Ledger comparison,FI
+GR55,Execute Report Group,FI
+GS03,Display Set,FI
+GT_IVL,Invoice List,FI
+HUMO,HU Monitor,LE
+IE02,Change Equipment,PM
+IE03,Display Equipment,PM
+IHC0,Payment Order Browser,FI
+IL03,Display Functional Location,QM
+IQ01,Create Material Serial Number,PM
+IQ02,Change Material Serial Number,PM
+IQ03,Display Material Serial Number,PM
+IQ09,Display Material Serial Number,PM
+IQS1,Create Notification - Extended View,QM
+IQS12,Process Task,QM
+IQS13,Display Task,QM
+IQS2,Change Notification - Extended View,QM
+IQS3,Display Notification - Extended View,FI
+IQS9,Worklist: Tasks (General),QM
+ITINVOICE,Vendor Customer List (Italy),FI
+J1B3N,Display Nota Fiscal - Enjoy,FI
+J6NY,DocuLink,FI
+KA03,Display Cost Element,FI
+KA05,Cost element: display changes,FI
+KA23,Cost Elements: Master Data Report,FI
+KABL,Order: Planning Overview,FI
+KAH3,Display cost element group,FI
+KAK3,Display Statistical Key Figures,FI
+KB33N,Display Statistical Key Figures,FI
+KB63,Display Reposting of CO Line Items,FI
+KBH3,Display statistical key figure group,FI
+KCH3,Display profit center hierarchy,FI
+KCH6N,EC-PCA: Display Standard Hierarchy,FI
+KE21N,CO-PA Line Item Entry,FI
+KE24,Line Item Display - Actual Data,FI
+KE26,Repost Accounting Document,FI
+KE27,Periodic valuation,FI
+KE28,Create top-down distribution,FI
+KE28A,Run Top-Down Distribution,FI
+KE28L,Administration: Logs,FI
+KE29N,Administration: Logs,FI
+KE4S,Post billing documents to CO-PA,FI
+KE4S00,CO-PA: Reversal of Line Items,FI
+KE53,Display Profit Center,FI
+KE5X,Profit Center: Master Data Index,FI
+KEPC,Flexible Callup of Cost Estimates,FI
+KK03,Display Statistical Key Figures,FI
+KK04,Stat.Key Figures: Master Data Report,FI
+KKBC_HOE,Analyze Summarization Object,FI
+KKBC_ORD,Analyze Order,FI
+KKH3,Display Cost Object Group,FI
+KKRC,Summarization: CO Object,CO
+KKRS,Summarization: Repetitive Mfg (COC),CO
+KKRV,Data Collection Product Drilldown,CO
+KL03,Display Activity Type,CO
+KL05,Activity type: Display changes,CO
+KL13,Activity Types: Master Data Report,CO
+KLH3,Display Activity Type Group,CO
+KO01,Create Internal Order,FI
+KO02,Change Order,FI
+KO03,Display Internal Order,CO
+KO12,"Change Order Plan (Overall, Year)",FI
+KO13,"Display Order Plan (Overall, Year)",FI
+KO22,Change Order Budget,FI
+KO23,Display Order Budget,FI
+KO24,Change Order Supplement,FI
+KO25,Display Order Supplement,FI
+KO26,Change Order Return,FI
+KO27,Display Order Return,FI
+KO2A,Change budget document,FI
+KO2B,Display budget document,FI
+KO30,Activate Orders Availability Control,FI
+KO32,Deactivate Order Availability Cntrl,FI
+KOB1,Orders: Actual Line Items,CO
+KOB2,Orders: Commitment Line Items,CO
+KOB3,Orders: Variance Line Items,CO
+KOB4,Orders: Budget Line Items,CO
+KOB8,Orders: WIP/Results Anal. Line Items,CO
+KOBP,Orders: Plan Line Items,FI
+KOC4,Cost Analysis,FI
+KOCF,Carry Forward Order Commitments,FI
+KOCO,Budget Carryforward for Orders,FI
+KOH1,Create Order Group,FI
+KOH2,Change Order Group,FI
+KOH3,Display Order Group,FI
+KOK3,Collective Disp. Internal Orders,FI
+KOK4,Aut. Collect. Proc. Internal Orders,FI
+KOK5,Master Data List Internal Orders,CO
+KOSRLIST_OR,Internal Orders: Coll. Displ. SettRu,FI
+KP04,Set Planner Profile,FI
+KP27,Display Plan Data for Activity Types,CO
+KP46,Change Stat. Key Figure Plan Data,FI
+KP47,Display Stat. Key Figure Plan Data,FI
+KPF6,Change CElem/Activity Input Planning,FI
+KPF7,Display CElem./Acty Input Planning,FI
+KS01,Create Cost Center,CO
+KS02,Change Cost Center,CO
+KS03,Display Cost Center,CO
+KS05,Cost Center: Display Changes,FI
+KS13,Cost Centers: Master Data Report,CO
+KSB1,Cost Centers: Actual Line Items,CO
+KSB2,Cost Centers: Commitment Line Items,FI
+KSB5,Controlling Documents: Actual,CO
+KSBP,Cost Centers: Plan Line Items,CO
+KSBT,Cost centers: Activity prices,CO
+KSH3,Display Cost Center Group,FI
+KSU3,Display Actual Assessment,FI
+KSV3,Display Actual Distribution,FI
+LB01,Create Transfer Requirement,LE
+LB02,Change transfer requirement,LE
+LB03,Display Transfer Requirement,LE
+LB10,TRs for Storage Type,LE
+LB11,TRs for Material,LE
+LB12,TRs and Posting Change for Mat.Doc.,LE
+LB13,TRs for Requirement,LE
+LI01N,Create System Inventory Record,LE
+LI02N,Change System Inventory Record,LE
+LI03N,Display System Inventory Record,LE
+LI04,Print System Inventory Record,LE
+LI06,Block stor.types for annual invent.,LE
+LI11N,Enter Inventory Count,LE
+LI12N,Change inventory count,LE
+LI13N,Display Inventory Count,LE
+LI14,Start Inventory Recount,LE
+LICC,Cycle Counting per Quant,LE
+LL01,Warehouse Activity Monitor,LE
+LM00,Logon RF,LE
+LM01,Dynamic Menu,LE
+LM02,Select by SU -Put Away,LE
+LM03,Put Away - by TO,LE
+LM04,Put Away -System Guided,LE
+LM05,Picking by TO ID,LE
+LM06,Picking - by Delivery ID,LE
+LM07,Picking - System Guided,LE
+LM09,Put Away by Delivery ID,LE
+LM12,Material Inquiry,LE
+LM13,Put Away Clustered,LE
+LM19,Handling Unit - Pack,LE
+LM24,Packing HU by Delivery,LE
+LM50,Count Inventory By System Guided,LE
+LM51,Count Inventory By User Selection,LE
+LM58,Sys. guided dynamic inventory count,LE
+LM59,User initiated dynamic invent. count,LE
+LM60,User guided dynamic invent. count,LE
+LM61,Goods Issue by Delivery,LE
+LM63,Goods Issue by Shipment,LE
+LM74,Goods Receipt by ALL,LE
+LM76,Goods Receipt by HU,LE
+LM77,Queue Assignment,LE
+LP10,Direct picking for PO,LE
+LP11,WM staging of crate parts,LE
+LP12,Staging release order parts (WM-PP),LE
+LPIN,Info: Material Stock WM-PP,LE
+LPK3,Display Control Cycle for WM,LE
+LRF1,"RF Monitor, Active",LE
+LRF2,"RF Monitor, Passive",LE
+LS01N,Create Warehouse Master Record,LE
+LS02N,Change Warehouse Master Record,LE
+LS03N,Display Warehouse Master Record,LE
+LS04,Display Empty Storage Bins,LE
+LS07,Block Quants,LE
+LS08,Block Storage Bins by Aisle,LE
+LS09,Display Material Data for Stor.Type,LE
+LS11,Change several stor.bins simultan.,LE
+LS12,Block stor.type,LE
+LS23,Display Quants,LE
+LS24,Display Quants for Material,LE
+LS25,Display Quants per Storage Bin,LE
+LS26,Warehouse stocks per material,LE
+LS27,Display quants for storage unit,LE
+LS28,Display storage units / bin,LE
+LS33,Display storage unit,LE
+LS41,List of control cycles for WIP loc.,LE
+LT01,Create Transfer Order,LE
+LT03,Create TO for Delivery,LE
+LT04,Create TO from TR,LE
+LT05,Process Posting Change Notice,LE
+LT06,Create TO for Material Document,LE
+LT09,ID point function for storage units,LE
+LT11,Confirm Transfer Order Item,LE
+LT12,Confirm transfer order,LE
+LT13,Confirm TO for storage unit,LE
+LT14,Confirm preplanned TO item,LE
+LT15,Cancelling transfer order,LE
+LT16,Cancelling TO for storage unit,LE
+LT1B,Confirm TO-Item Pick,LE
+LT1C,Confirm TO-Item Transport,LE
+LT1D,Confirm Transfer Order Pick,LE
+LT1E,Confirm Transfer Order Transport,LE
+LT1F,Confirm TO for SU Pick,LE
+LT21,Display Transfer Order,LE
+LT22,Display Transfer Order / Stor. Type,LE
+LT23,Display Transfer Orders by Numbers,LE
+LT24,Display Transfer Order / Material,LE
+LT26,Transfer orders for storage bin,LE
+LT27,Transfer order for storage unit,LE
+LT31,Print TO Manually,LE
+LT32,Print transfer order for stor.unit,LE
+LU01,Create Posting Change Notice,LE
+LU02,Change Posting Change Notice,LE
+LU03,Display Posting Change Notice,LE
+LU04,Selection of Posting Change Notices,LE
+LX01,List of Empty Storage Bins,LE
+LX02,Stock list,LE
+LX03,Bin Status Report,LE
+LX04,Capacity load utilization,LE
+LX09,Overview of All Transf.Requirements,LE
+LX11,Document overview,LE
+LX12,Document Overview: Landscape Format,LE
+LX13,Analysis of differences,LE
+LX15,Selection of Bins for Annual Invent.,LE
+LX17,List of Inventory Differences,LE
+LX22,Process Inventory from Overview,LE
+LX24,Display of hazardous mat.numbers,LE
+LX26,Inventory in WM via cycle counting,LE
+LX27,Stock levels by shelf life exp.date,LE
+LX29,Fixed bin supervision,LE
+LX40,Material Situation Prod. Storage Bin,LE
+LX42,Evaluation PP Order from WM View,LE
+MB03,Display Material Document,LE
+MB04,"Subsequ.Adj.of ""Mat.Provided""Consmp.",LE
+MB11,Goods Movement,LE
+MB1A,Goods Withdrawal,LE
+MB1B,Transfer Posting,LE
+MB1C,Other Goods Receipts,LE
+MB23,Display Reservation,LE
+MB24,Reservation List,LE
+MB25,Reservation List,LE
+MB31,Goods Receipt for Production Order,LE
+MB51,Material Doc. List,LE
+MB52,List of Warehouse Stocks on Hand,LE
+MB53,Display Plant Stock Availability,LE
+MB56,Analyze batch where-used list,LE
+MB58,Consgmt and Ret. Packag. at Customer,LE
+MB59,Material Doc. List,LE
+MB5B,Stocks for Posting Date,LE
+MB5L,List of Stock Values: Balances,LE
+MB5M,BBD/Prod. Date,LE
+MB5S,Display List of GR/IR Balances,LE
+MB5SIT,Display Stock in Transit,LE
+MB5T,Stock in transit CC,LE
+MB90,Output Processing for Mat. Documents,LE
+MBGR,Displ. Material Docs. by Mvt. Reason,LE
+MBLB,Stocks at Subcontractor,LE
+MBSM,Display Cancelled Material Docs.,LE
+MBST,Cancel Material Document,LE
+MC$0,PURCHIS: PurchGrp PurchVal Selection,MM
+MC$4,PURCHIS: Vendor PurchVal Selection,MM
+MC$G,PURCHIS: Material PurchVal Selection,MM
+MC.5,"INVCO: SLoc Anal. Selection, Stock",LE
+MC.9,"INVCO: Material Anal.Selection,Stock",LE
+MC42,INVCO: Range of Coverage by Usg.Val.,LE
+MC43,INVCO: Range Of Coverage By Reqmts,LE
+MC44,INVCO:Analysis of Inventory Turnover,LE
+MC45,INVCO: Analysis of Usage Values,LE
+MC46,INVCO: Analysis of Slow-Moving Items,LE
+MC47,INVCO: Analysis of Reqmt Values,LE
+MC48,INVCO: Anal. of Current Stock Values,LE
+MC49,INVCO: Mean Stock Values,LE
+MC50,INVCO: Analysis of Dead Stock,LE
+MC85,Display Product Group,LE
+MCB),INVCO: Long-Term Stock Selection,LE
+MCBA,INVCO: Plant Analysis Selection,LE
+MCBE,INVCO: Material Analysis Selection,LE
+MCBZ,INVCO: Stck/Reqt Analysis Selection,LE
+MCOP,QMIS: Cust. Analysis Item Q Not.,LE
+MCOV,QMIS: Cust. Anal. Overview Q Not.,LE
+MCPD,Production order analysis: Dates,LE
+MCPM,Production order anal.: Quantities,LE
+MCPS,Operation analysis: Lead time,LE
+MCPU,Production Order Analysis: Lead Time,LE
+MCPY,Work center analysis: Lead time,LE
+MCR:,"Std Analyses: User Settings, CALL",LE
+MCRE,Material Usage Analysis: Selection,LE
+MCVM,QMIS: Vendor Analyis - Level & Disp.,QM
+MCVP,QMIS: vendor analysis items Q notif.,QM
+MCVZ,QMIS: Ven. Analysis- Q Not. Overview,QM
+MCXM,QMIS: Matl Analysis - Level & Disp.,QM
+MCXP,QMIS: Matl. Analysis - Q Notif. Item,QM
+MCXV,QMIS: mat. analysis overview Q not.,QM
+MD02,"MRP - Single-Item, Multi-Level",PP
+MD03,MRP-Individual Planning-Single Level,MM
+MD04,Display Stock/Requirements Situation,PP
+MD05,Individual Display Of MRP List,PP
+MD06,Collective Display Of MRP List,PP
+MD07,Current Material Overview,PP
+MD09,Pegging,MM
+MD12,Change Planned Order,MM
+MD13,Display Planned Order,PP
+MD14,Individual Conversion of Plnned Ord.,MM
+MD15,Collective Conversion Of Plnd Ordrs.,MM
+MD16,Collective Display of Planned Orders,PP
+MD19,Firm Planned Orders,PP
+MD21,Display Planning File Entry,PP
+MD27,Display Planning Calendar,PP
+MD44,MPS Evaluation,PP
+MD45,MRP List Evaluation,PP
+MD46,Eval. MRP lists of MRP controller,PP
+MD47,Product Group Planning Evaluation,MM
+MD48,Cross-Plant Evaluation,MM
+MD4C,Multilevel Order Report,PP
+MD63,Display Planned Indep. Requirements,PP
+MD73,Display Total Indep. Requirements,PP
+MD79,"""PP Demand Mngmt - XXL List Viewer""",PP
+MDDO,Evaluation Report RoCs Online,MM
+MDVP,Collective Availability Check PAUF,MM
+ME01,Maintain Source List,MM
+ME03,Display Source List,MM
+ME04,Changes to Source List,MM
+ME05,Generate Source List,MM
+ME06,Analyze Source List,MM
+ME07,Reorganize Source List,MM
+ME0M,Source List for Material,MM
+ME11,Create Purchasing Info Record,MM
+ME12,Change Purchasing Info Record,MM
+ME13,Display Purchasing Info Record,MM
+ME14,Changes to Purchasing Info Record,MM
+ME15,Flag Purch. Info Rec. for Deletion,MM
+ME16,Purchasing Info Recs. for Deletion,MM
+ME1E,Quotation Price History,MM
+ME1L,Info Records per Vendor,MM
+ME1M,Info Records per Material,MM
+ME1P,Purchase Order Price History,MM
+ME1W,Info Records per Material Group,MM
+ME21N,Create Purchase Order,MM
+ME22N,Change Purchase Order,MM
+ME23,Display Purchase Order,MM
+ME23N,Display Purchase Order,MM
+ME24,Maintain Purchase Order Supplement,MM
+ME28,Release Purchase Order,MM
+ME29N,Release purchase order,MM
+ME2A,Monitor Confirmations,MM
+ME2C,Purchase Orders by Material Group,MM
+ME2K,Purch. Orders by Account Assignment,MM
+ME2L,Purchase Orders by Vendor,MM
+ME2M,Purchase Orders by Material,MM
+ME2N,Purchase Orders by PO Number,MM
+ME2O,SC Stock Monitoring (Vendor),MM
+ME2ON,Subcontracting Cockpit,MM
+ME2S,Services per Purchase Order,MM
+ME2W,Purchase Orders for Supplying Plant,MM
+ME31K,Create Contract,MM
+ME31L,Create Scheduling Agreement,MM
+ME32K,Change Contract,MM
+ME32L,Change Scheduling Agreement,MM
+ME33K,Display Contract,MM
+ME33L,Display Scheduling Agreement,MM
+ME34,Maintain Outl. Agreement Supplement,MM
+ME34K,Maintain Contract Supplement,MM
+ME34L,Maintain Sched. Agreement Supplement,MM
+ME35K,Release Contract,MM
+ME35L,Release Scheduling Agreement,MM
+ME38,Maintain Sched. Agreement Schedule,MM
+ME39,Display Sched. Agmt. Schedule (TEST),MM
+ME3B,Outl. Agreements per Requirement No.,MM
+ME3C,Outline Agreements by Material Group,MM
+ME3K,Outl. Agreements by Acct. Assignment,MM
+ME3L,Outline Agreements per Vendor,MM
+ME3M,Outline Agreements by Material,MM
+ME3N,Outline Agreements by Agreement No.,MM
+ME41,Create Request For Quotation,MM
+ME42,Change Request For Quotation,MM
+ME43,Display Request For Quotation,MM
+ME44,Maintain RFQ Supplement,MM
+ME47,Create Quotation,MM
+ME48,Display Quotation,MM
+ME49,Price Comparison List,MM
+ME4B,RFQs by Requirement Tracking Number,MM
+ME4C,RFQs by Material Group,MM
+ME4L,RFQs by Vendor,MM
+ME4M,RFQs by Material,MM
+ME4N,RFQs by RFQ Number,MM
+ME4S,RFQs by Collective Number,MM
+ME51N,Create Purchase Requisition,MM
+ME52N,Change Purchase Requisition,MM
+ME53,Display Purchase Requisition,MM
+ME53N,Display Purchase Requisition,MM
+ME56,Assign Source to Purch. Requisition,MM
+ME57,Assign and Process Requisitions,MM
+ME58,Ordering: Assigned Requisitions,MM
+ME59N,Automatic generation of POs,MM
+ME5A,Purchase Requisitions: List Display,MM
+ME5F,Release Reminder: Purch. Requisition,MM
+ME5J,Purchase Requisitions for Project,MM
+ME5K,Requisitions by Account Assignment,MM
+ME5W,Resubmission of Purch. Requisitions,MM
+ME61,Maintain Vendor Evaluation,MM
+ME62,Display Vendor Evaluation,MM
+ME63,Evaluation of Automatic Subcriteria,MM
+ME64,Evaluation Comparison,MM
+ME65,Evaluation Lists,MM
+ME6A,Changes to Vendor Evaluation,MM
+ME6B,Display Vendor Evaln. for Material,MM
+ME6C,Vendors Without Evaluation,MM
+ME6D,Vendors Not Evaluated Since...,MM
+ME6E,Evaluation Records Without Weighting,MM
+ME6F,Print,MM
+ME6G,Vendor Evaluation in the Background,MM
+ME6H,Standard Analysis: Vendor Evaluation,MM
+ME80FN,General Analyses (F),MM
+ME81N,Analysis of Order Values,MM
+ME91A,Urge Submission of Quotations,MM
+ME91E,Sch. Agmt. Schedules: Urging/Remind.,MM
+ME91F,Purchase Orders: Urging/Reminders,MM
+ME92F,Monitor Order Acknowledgment,MM
+ME92K,Monitor Order Acknowledgment,MM
+ME9A,Message Output: RFQs,MM
+ME9E,Message Output: Sch. Agmt. Schedules,MM
+ME9F,Message Output: Purchase Orders,MM
+ME9K,Message Output: Contracts,MM
+MEK1,Create Conditions (Purchasing),MM
+MEK2,Change Conditions (Purchasing),MM
+MEK3,Display Conditions (Purchasing),MM
+MELB,Purch. Transactions by Tracking No.,MM
+MEQ1,Maintain Quota Arrangement,MM
+MEQ3,Display Quota Arrangement,MM
+MEQ4,Changes to Quota Arrangement,MM
+MEQ6,Analyze Quota Arrangement,MM
+MEQ7,Reorganize Quota Arrangement,MM
+MEQ8,Monitor Quota Arrangements,MM
+MEQM,Quota Arrangement for Material,MM
+MF60,Pull List,MM
+MI03,Display Physical Inventory Document,MM
+MI04,Enter Inventory Count with Document,MM
+MI05,Change Inventory Count,MM
+MI06,Display Inventory Count,MM
+MI09,Enter Inventory Count w/o Document,MM
+MI20,Print List of Differences,MM
+MI21,Print physical inventory document,MM
+MI22,Display Phys. Inv. Docs. f. Material,MM
+MI24,Physical Inventory List,MM
+MICN,Btch Inpt:Ph.Inv.Docs.for Cycle Ctng,MM
+MIGO,Goods Movement,LE
+MIGO_GI,Goods Movement,MM
+MIGO_GO,Goods Movement,LE
+MIGO_GR,Goods Movement,MM
+MIGO_TR,Transfer Posting,MM
+MIO1,Batch Input: Ph.Inv.Doc.:Stck w.Subc,MM
+MIR4,Call MIRO - Change Status,MM
+MIR5,Display List of Invoice Documents,MM
+MIW1,Batch I.;PhInDoc f. Consigt at Cust.,MM
+MK03,Display vendor (Purchasing),MM
+MKVZ,List of Vendors: Purchasing,MM
+ML33,Create Vendor Conditions,MM
+ML34,Change Vendor Conditions,MM
+ML39,Create Vendor Conditions,MM
+ML40,Change Vendor Conditions,MM
+ML46,Change Service Conditions,MM
+ML82,Display Service Entry Sheet,MM
+MLCCSPD,Cost Components for Price,FI
+MM01,Create Material ,MM
+MM02,Change Material ,MM
+MM03,Display Material ,MM
+MM04,Display Material Change Documents,MM
+MM19,Display Material & at Key Date,MM
+MM60,Materials List,MM
+MMBE,Stock Overview,MM
+MN04,Create Message: PO,MM
+MN05,Change Message: PO,MM
+MN06,Display Message: PO,MM
+MN10,Create Message: Schd. Agmt. Schedule,MM
+MN11,Change Message: Schd. Agmt. Schedule,MM
+MN12,Displ. Message: Schd. Agmt. Schedule,MM
+MP01,Maintain AMPL Records,MM
+MP02,Display AMPL Records,MM
+MRBR,Release Blocked Invoices,MM
+MRN9,Balance Sheet Values by Account,MM
+MSC1N,Create Batch,PP
+MSC3N,Display Batch,PP
+MSC4N,Display Change Documents for Batch,PP
+MSRV2,Service List for Requisition,MM
+MSRV3,Service List for Purchase Order,MM
+MSRV4,Service List for RFQ,MM
+NWBC,Launch NWBC,FI
+O27C,Display Charac. with PP-PI Attribute,PP
+OKENN,Display Standard Hierarchy,FI
+OKKS,Set Controlling Area,FI
+OKP2,Display Period Lock,FI
+OV50,Comparison of master data for cust.,SD
+OV51,Display of Changes for Customer,SD
+OVF_HISTORY,History of Online Validation Checks,PP
+OVF_MASS_CHECK,Online Validation for Partners,PP
+PK06,PP Maintain Supply Area (Kanban),PP
+PK11,Plant Overview: Kanban,PP
+PK18,Evaluation Control Cycle/Kanban,PP
+PK50,Display Errors: Kanban,PP
+POF3,Display Packing Instr. Determination,PP
+POP3,Display Packing Instruction,PP
+PPOSE,Display organization and Staffing,PP
+QA03,Display inspection lot,QM
+QA07L,Deadline Monitoring Log,QM
+QA13,Display usage decision,QM
+QA32,Change data for inspection lot,QM
+QA33,Display data for inspection lot,QM
+QC03,Display certificate profile,QM
+QC17,Display cert. profile assignment,QM
+QC51,Create certificate in procurement,QM
+QC52,Change certificate in procurement,QM
+QC55,Worklist: Certificates - Procurement,QM
+QDB3,Display allowed relationships,QM
+QDH2,Q-level evaluation: Display data,QM
+QDL3,Display quality level,QM
+QDP3,Display sampling scheme,QM
+QDR3,Display dynamic modification rule,QM
+QDR6,Disp. where-used list-dyn. mod. rule,QM
+QDV3,Display sampling procedure,QM
+QE03,Display characteristic results,QM
+QE09,Indiv.display of charac.result,QM
+QE13,Display results for inspection point,QM
+QEI1,Displaying QM Interfaces Appl. Log,QM
+QF03,Display defect data,QM
+QGA2,Display inspection results,QM
+QGA4,General QM Evaluations,QM
+QGC1,Qual. control charts for insp. lots,QM
+QGC2,Control charts for task list charac.,QM
+QGC3,Control charts for master insp. char,QM
+QI03,Display quality info. - purchasing,QM
+QK02,Display assigned QM orders,QM
+QM01,Create quality notification,QM
+QM02,Change quality notification,QM
+QM03,Display quality notification,QM
+QM10,Change list of quality notifications,QM
+QM11,Display List of Qual. Notifications,QM
+QM12,Change list of tasks,QM
+QM13,Display list of tasks,QM
+QM14,Change list of items,QM
+QM15,Display list of items,QM
+QM16,Change activity list,QM
+QM17,Display activity list,QM
+QM19,"List of Q Notifications, Multi-Level",QM
+QM50,Time line display Q notifications,QM
+QP03,Display Inspection Plan,QM
+QP61,Display change documents insp.plan,QM
+QPR3,Display physical sample,QM
+QPV3,Display sample drawing procedure,QM
+QS24,Display master insp. charac. version,QM
+QS26,Display characteristic use,QM
+QS28,Display insp. charac. list,QM
+QS34,Display inspection method version,QM
+QS36,Display inspection method use,QM
+QS38,Display inspection method list,QM
+QS42,Display catalog,QM
+QS49,Display code groups and codes,QM
+QS52,Display selected set index,QM
+QS59,Display selected sets,QM
+RPC0,Info. System CCtrs: Presettings,FI
+RPO0,Info. System Orders: Presettings,FI
+RWBE,Multi Material Stock Overview,MM
+S_ALN_01001144,Overview - Positions,FI
+S_ALN_01001149,Remaining Term Statistics,FI
+S_ALN_01001151,Overview - Accounting,FI
+S_ALN_01001154,Simulated Valuation,FI
+S_ALN_01001155,CFM Key Date Comparison,FI
+S_ALN_01001157,Position Trend,FI
+S_ALN_01001159,Revenues,FI
+S_ALN_01001160,Sales Proceeds,FI
+S_ALN_01001161,Due Date Grid,FI
+S_ALR_87009895,Advance Return for Tax on Sales/Pur.,FI
+S_ALR_87009973,Customer Master Data Comparison,MDM
+S_ALR_87010052,Vendor Master Data Comparison,MDM
+S_ALR_87010175,Depreciation Posted to Cost Center,FI
+S_ALR_87010192,Asset Transactions,FI
+S_ALR_87010193,Asset Transactions,FI
+S_ALR_87011963,Asset Balances,FI
+S_ALR_87011979,Physical Inventory List,FI
+S_ALR_87011981,Physical Inventory List,FI
+S_ALR_87011990,Asset History Sheet,FI
+S_ALR_87012004,Depreciation,FI
+S_ALR_87012013,Depreciation Comparison,FI
+S_ALR_87012015,Manual Depreciation,FI
+S_ALR_87012026,Depreciation,FI
+S_ALR_87012028,Net Worth Valuation,FI
+S_ALR_87012037,Changes to Asset Master Records,FI
+S_ALR_87012039,Asset Transactions,FI
+S_ALR_87012046,Asset Acquisitions(Mid-Quarter-Conv),FI
+S_ALR_87012047,Asset Acquisitions(Mid-Quarter-Conv),FI
+S_ALR_87012048,Asset Transactions,FI
+S_ALR_87012050,Asset Acquisitions,FI
+S_ALR_87012052,Asset Retirements,FI
+S_ALR_87012054,Intracompany Asset Transfers,FI
+S_ALR_87012056,Directory of Unposted Assets,FI
+S_ALR_87012064,Depreciation,FI
+S_ALR_87012066,Analysis of Retirement Revenue,FI
+S_ALR_87012075,Asset History,FI
+S_ALR_87012078,Due Date Analysis for Open Items,MM
+S_ALR_87012079,Transaction Figures: Account Balance,MM
+S_ALR_87012082,Vendor Balances in Local Currency,MM
+S_ALR_87012083,List of Vendor Open Items,MM
+S_ALR_87012084,Open Items: Vendor Due Date Forecast,MM
+S_ALR_87012085,Vendor Payment History,MM
+S_ALR_87012086,Vendor List,MM
+S_ALR_87012087,List of vendor addresses,MM
+S_ALR_87012089,Display Changes to Vendors,MM
+S_ALR_87012102,Vendor Master Data Comparison,MDM
+S_ALR_87012103,List of Vendor Line Items,MM
+S_ALR_87012104,List Of Cleared Vendor Items,MM
+S_ALR_87012132,Withholding Tax Report - France,FI
+S_ALR_87012167,Accounts Rec. Information System,FI
+S_ALR_87012168,Due Date Analysis for Open Items,FI
+S_ALR_87012170,Transaction Figures: Special Sales,FI
+S_ALR_87012171,Transaction Figures: Sales,FI
+S_ALR_87012172,Customer Balances in Local Currency,FI
+S_ALR_87012173,List of Customer Open Items,FI
+S_ALR_87012174,List of Customer Open Items,FI
+S_ALR_87012175,Open Items: Customer Due Date Forec.,FI
+S_ALR_87012176,Customer Eval. with OI Sorted List,FI
+S_ALR_87012177,Customer Payment History,FI
+S_ALR_87012178,Customer Open Item Analysis(Overdue),FI
+S_ALR_87012179,Customer List,MDM
+S_ALR_87012180,List of customer addresses,MDM
+S_ALR_87012182,Display Changes to Customers,MDM
+S_ALR_87012183,Display Critical Customer Changes,MDM
+S_ALR_87012195,Customer Master Data Comparison,MDM
+S_ALR_87012197,List of Customer Line Items,MM
+S_ALR_87012198,List of Cleared Customer Items,FI
+S_ALR_87012199,Open Down Payments,FI
+S_ALR_87012208,Bill of Exchange List,FI
+S_ALR_87012209,Extended Bill of Exchange List (ALV),FI
+S_ALR_87012211,Maintain Bill of Exchange Liability,FI
+S_ALR_87012215,Display Changes to Credit Management,FI
+S_ALR_87012218,Credit Master Sheet,FI
+S_ALR_87012271,Cash Flow (Direct Method),FI
+S_ALR_87012272,Cash Flow (Indirect Method) Variant,FI
+S_ALR_87012273,Cash Flow (Indirect Method) Variant,FI
+S_ALR_87012277,G/L Account Balances,FI
+S_ALR_87012282,General Ledger Line Items,FI
+S_ALR_87012284,Financial Statements,FI
+S_ALR_87012287,Document Journal,FI
+S_ALR_87012289,Compact Document Journal,FI
+S_ALR_87012291,Line Item Journal,MM
+S_ALR_87012293,Display of Changed Documents,FI
+S_ALR_87012301,G/L Account Balances,FI
+S_ALR_87012308,Display Changes to G/L Accounts,FI
+S_ALR_87012326,Chart of Accounts,FI
+S_ALR_87012328,G/L Account List,FI
+S_ALR_87012330,Account Assignment Manual,FI
+S_ALR_87012332,Customer / Vendor / G/L Account,FI
+S_ALR_87012333,G/L accounts list,FI
+S_ALR_87012341,Invoice Numbers Allocated Twice,FI
+S_ALR_87012342,Gaps in Document Number Assignment,FI
+S_ALR_87012344,Posting Totals,FI
+S_ALR_87012346,Recurring Entry Documents,FI
+S_ALR_87012347,Line Items Extract,FI
+S_ALR_87012357,Advance Return for Tax on Sales/Pur.,FI
+S_ALR_87012386,VAT Report for Portugal,FI
+S_ALR_87012394,Record of Use and Sales Taxes (USA),FI
+S_ALR_87012403,EC Sales List (Spain),FI
+S_ALR_87012936,Depreciation Simulation,FI
+S_ALR_87012957,BOM Changes for a Change Number,MM
+S_ALR_87012976,All Changes for Change Number,MM
+S_ALR_87012977,BOM Changes for a Change Number,PP
+S_ALR_87012979,ECH: Change Number Overview,pp
+S_ALR_87012987,Documents for Change Number,pp
+S_ALR_87012993,Orders: Actual/plan/variance,FI
+S_ALR_87012994,Orders: Current Period/Cumulative,FI
+S_ALR_87012995,List: Orders,FI
+S_ALR_87012996,List: Orders by Cost Element,FI
+S_ALR_87012999,Orders: Actual/Plan/Commitments,FI
+S_ALR_87013001,Orders: Yearly Comparison - Actual,FI
+S_ALR_87013002,Orders: Quarterly Comparison - Act.,FI
+S_ALR_87013003,Orders: Period Comparison - Actual,FI
+S_ALR_87013007,SObj: Actual/Plan/Variance,FI
+S_ALR_87013008,SObj: Actual/Plan/Commitment,FI
+S_ALR_87013009,SObj: Current/Cumulated/Total,FI
+S_ALR_87013010,Orders: Breakdown by Period,FI
+S_ALR_87013011,Orders: Actual/Plan/Price Variance,FI
+S_ALR_87013012,Orders: Actual/Plan/Consumption,FI
+S_ALR_87013013,Orders: Actual TCrcy/OCrcy/CAcrcy,FI
+S_ALR_87013014,List: Cost Elements (True Postings),FI
+S_ALR_87013015,List: Actual Debit/Credit,FI
+S_ALR_87013016,List: Plan Debit/Credit,FI
+S_ALR_87013018,List: Total Plan/Actual/Commitments,CO
+S_ALR_87013019,List: Budget/Actual/Commitments,CO
+S_ALR_87013046,Planned Costs,CO
+S_ALR_87013127,Order Selection,CO
+S_ALR_87013139,Target/Actual/Prod.Variances: Cum.,CO
+S_ALR_87013140,Target/Actual/Prod.Variances: Period,CO
+S_ALR_87013142,Target/Actual Comparison: Cumulative,CO
+S_ALR_87013143,Target/Actual Comparison: Periods,CO
+S_ALR_87013145,Plan/Actual Comparison: Cumulative,CO
+S_ALR_87013146,Plan/Actual Comparison: Periods,CO
+S_ALR_87013148,Variance Categories: Cumulative,CO
+S_ALR_87013149,Variance Categories: Periods,CO
+S_ALR_87013151,Actual/WIP: Cumulative,CO
+S_ALR_87013152,Actual/WIP: Periods,CO
+S_ALR_87013154,Planned Costs: Cumulative,CO
+S_ALR_87013155,Planned Costs: Periodic,CO
+S_ALR_87013157,Cumulated Actual Costs,CO
+S_ALR_87013158,Actual Costs: Periods,CO
+S_ALR_87013162,Overview of Order Hierarchies,CO
+S_ALR_87013180,Listing of Materials by Period,FI
+S_ALR_87013181,Material Ledger Data Over Sev.Period,FI
+S_ALR_87013182,Transaction History for a Material,FI
+S_ALR_87013611,Cost Centers: Actual/Plan/Variance,FI
+S_ALR_87013612,Area: Cost Centers,FI
+S_ALR_87013617,Range: Activity Types,FI
+S_ALR_87013618,Range: Statistical Key Figures,FI
+S_ALR_87013631,Cost Centers: Rolling Year,FI
+S_ALR_87013633,Cost Centers: Act./Plan/Var./Prev.Yr,FI
+S_ALR_87013638,Cost Centers: Curr./Cum./Total Year,FI
+S_ALR_87013643,Range: Orders,FI
+S_ALR_87013647,Activity Types: Scheduled/Plan,FI
+S_ALR_87013648,Range: Actual/Budget/Commitments,FI
+S_ALR_87014407,Journal of Financial Transactions,FI
+S_ALR_87015198,Correspondence Overview,FI
+S_ALR_87015202,Journal: Transactions w. Cash Flows,FI
+S_ALR_87015205,Treasury: Payment Schedule,FI
+S_ALR_87015216,Posting Overview,FI
+S_ALR_87015220,Treasury:Journal of Financial Trans.,FI
+S_ALR_87015226,Journal: Transactions w. Cash Flows,FI
+S_ALR_87015228,Treasury: Payment Schedule,FI
+S_ALR_87015232,Posting Overview,FI
+S_ALR_87015239,Treasury:Journal of Financial Trans.,FI
+S_ALR_87015245,Journal: Transactions w. Cash Flows,FI
+S_ALR_87015248,Treasury: Payment Schedule,FI
+S_ALR_87015254,Posting Overview,FI
+S_ALR_87099918,Primary Cost Planning Dep./Interest,FI
+S_ALR_87099930,Analyze Costing Run,CO
+S_ALR_87099931,Analyze Costing Run,CO
+S_ALR_87099932,Variances Between Costing Runs,CO
+S_ALR_87100623,Asset Retirements (French Law),FI
+S_ALR_87100833,"Standard for Italy, Spain",FI
+S_ALR_87101238,Display Change Documents,FI
+S_BCE_68000174,IMG activity: SIMG_CFMENUORFBOB08,FI
+S_BCE_68001393,Users by address data,CO
+S_EB5_05000741,Ledger Comparison,FI
+S_EBS_44000137,Ledger Comparison,FI
+S_P00_07000111,Advance Return for Tax on Sales/Pur.,FI
+S_P00_07000134,Simple Withholding Tax Return,CO
+S_P00_07000221,EC Sales List in DME Format,FI
+S_P99_41000062,Materials List: Prices and Inventory,FI
+S_P99_41000111,List of Existing Mat. Cost Estimates,CO
+S_PL0_09000127,Print Program: Spanish Invoice,FI
+S_PL0_09000447,Withholding Tax Report for Vendor,CO
+S_PL0_86000028,Fin. Statements: Act/Act Comparison,FI
+S_PL0_86000029,Fin. Statement: Plan/Act. Comparison,FI
+S_PL0_86000030,G/L Account - Balances,FI
+S_PL0_86000031,Transaction Figures: Account Balance,FI
+S_PL0_86000032,SAP Structured Balance List,FI
+SBWP,SAP Business Workplace,FI
+SDV,Document Viewer,FI
+SEARCH_SAP_MENU,Find in SAP Menu,FI
+SESSION_MANAGER,Session Manager Menu Tree Display,FI
+SMX,Display Own Jobs,FI
+SMXX,Display Own Jobs,FI
+SO00,SAPoffice: Short Message,FI
+SO01,SAPoffice: Inbox,FI
+SO02,SAPoffice: Outbox,FI
+SO03,SAPoffice: Private Folders,FI
+SO07,SAPoffice: Resubmission,FI
+SP02,Display Spool Requests,BC
+SSC0,SAP Appointment Calendar (Employee),FI
+SSC1,SAP (own) Appointment Calendar,FI
+SU3,Maintain Users Own Data,BC
+SU53,Evaluate Authorization Check,BC
+SU56,Analyze User Buffer,BC
+SWIA,WI Administration Report,FI
+SWO_ASYNC,Asynchronous Method Call in BOR,FI
+SXMB_MONI,Integration Engine - Monitoring,BC
+TBCD,Treasury: Change Docs Transactions,FI
+TBR8,Treasury: Display reference,FI
+THM80,Effectiveness test,FI
+THM81,OCI per hedging relationship,FI
+THM82,Hedge plan overview,FI
+THM83,Hedging Relationships per Derivative,FI
+THM84,Prematurely Reclassified OCI,FI
+THM85,Change documents for Hedge Managemnt,FI
+TIS1,Overview - Positions,FI
+TJ01,Journal of transactions,FI
+TJ06,Option Expiration,FI
+TJ07,Interest/Price Adjustment Schedule,FI
+TJ10,Summary Journal Fin. Transctions,FI
+TJ12,Journal: Transactions w. Cash Flows,FI
+TM_53,Display Interest Rate Instrument,FI
+TM_60,Line of Credit and Utilization,FI
+TM_60A,"Lines of Credit, Drawings, Fees",FI
+TM_63,Display Facility,FI
+TM03,Display Fixed-Term Deposit,FI
+TM13,Display Deposit at Notice,FI
+TM22,Check Dates against Calendar,FI
+TM33,Display Commercial Paper,FI
+TM43,Display Cash Flow Transaction,FI
+TMR1,Money Market: Flexible Position List,FI
+TPM12,Treasury Ledger: Position List,FI
+TPM13,Treasury Ledger: Flow List,FI
+TPM20,Posting Journal,FI
+TPM51,Periodic TRL Reporting,FI
+TPM57C,Display Pos. ID (OTC Transactions),FI
+TX-2,Maturity Schedule for Fwd Exch.Trans,FI
+V.00,List of Incomplete Documents,SD
+V.15,Display Backorders,SD
+V/LC,Display Pricing Report,SD
+V_RA,Backorder Processing: Selection List,SD
+V-44,Display        Material Price,SD
+V-48,Display        Price List,SD
+V-52,Display        Cust.price,SD
+VA01,Create Sales Order,SD
+VA02,Change Sales Order,SD
+VA03,Display Sales Order,SD
+VA05,List of Sales Orders,SD
+VA05N,List of Sales Orders- Enhanced version,SD
+VA06,Sales Order Monitor,SD
+VA14L,Sales Documents Blocked for Delivery,SD
+VA23,Display Quotation,SD
+VA33,Display Scheduling Agreement,SD
+VA43,Display Contract,SD
+VA45N,List of Contracts,SD
+VAP3,Display Contact Person,SD
+VB03,Display Material Listing/Exclusion,SD
+VB13,Display Material Substitution,SD
+VBO3,Display Rebate Agreement,SD
+VD03,Display Customer (Sales),SD
+VD53,Display Customer-Material Info,SD
+VDBLOCK,Documents Blocked for Delivery,SD
+VF01,Create Billing Document,SD
+VF02,Change Billing Document,SD
+VF03,Display Billing Document,SD
+VF05,List Billing Documents,SD
+VF05N,List of Billing Documents,SD
+VF23,Display Invoice List,SD
+VFX3,List Blocked Billing Documents,SD
+VK01,Conditions: Dialog Box for CondElem.,SD
+VK13,Display Condition,SD
+VL02N,Change Outbound Delivery,LE
+VL03,Display Outbound Delivery,LE
+VL03N,Display Outbound Delivery,SD
+VL06,Delivery Monitor,SD
+VL06C,List Outbound Dlvs for Confirmation,SD
+VL06D,Outbound Deliveries for Distribution,SD
+VL06F,General delivery list - Outb.deliv.,SD
+VL06G,List of Oubound Dlvs for Goods Issue,SD
+VL06I,Inbound Delivery Monitor,LE
+VL06IC,Confirmation of putaway inb. deliv.,LE
+VL06IF,Selection inbound deliveries,LE
+VL06IG,Inbound deliveries for goods receipt,LE
+VL06IP,Inbound deliveries for putaway,LE
+VL06L,Outbound Deliveries to be Loaded,LE
+VL06O,Outbound Delivery Monitor,LE
+VL06P,List of Outbound Dlvs for Picking,LE
+VL06T,List Outbound Dlvs (Trans. Planning),LE
+VL10B,Purchase Orders Due for Delivery,LE
+VL10D,Purch. Order Items due for Delivery,LE
+VL10F,PurchOrd Schedule Lines due for Dlv.,LE
+VL10G,Documents due for Delivery,LE
+VL22,Display Delivery Change Documents,LE
+VL22N,Display Delivery Change Documents,LE
+VL31N,Create Inbound Delivery,LE
+VL32N,Change Inbound Delivery,LE
+VL33N,Display Inbound Delivery,LE
+VL71,Output from Outbound Deliveries,LE
+VL74,Output from Handling Units,LE
+VL75,Shipping Notification Output,LE
+VLMOVE,HU Goods Movements,LE
+VLPOD,Proof of delivery - Change Outbound Delivery,LE
+VLPODA,POD - Display Outbound Delivery,LE
+VT01N,Create Shipment,LE
+VT03N,Display Shipment,LE
+VT06,Select Shipments: Materials Planning,LE
+VT12,Select Shipments: Transpt Processing,LE
+VTRK,Tracking,LE
+VV13,Display Output: Sales,SD
+VV33,Display Output: Billing,SD
+WE02,Display IDoc,BC
+WE05,IDoc Lists,BC
+XD03,Display Customer (Centrally),MDM
+XD04,Customer Changes (Centrally),MDM
+XK03,Display vendor (centrally),FI
+XK04,Vendor Changes (Centrally),MDM
+Z_PTP_VENDORS,PTP vendors,MM
+Z_UPD_CROSS_TAB,Tcode to maintain ZMDM_LEGCY_CROSS,MDM
+ZDAT_LEGACYPHS_TCODE,Legacy Product Hierarchy Structure,SD
+ZDEV_EMI,EMI Transaction,BC
+ZDEV_EZTRAC,EZ TRAC transaction,BC
+ZDEV_MONITORING,Transaction for executing the report,BC
+ZDEV_MOVE_FILES,Move Files Between Folders,BC
+ZLEX_0070_BINUPD,LEX_EDD_0070 Change bin master,LE
+ZLEX_BIN_TO_BIN_16,Transaction for Bin To Bin Transfer,LE
+ZLEX_BIN_TO_BIN_TRAN,TCode for RF WM Bin to Bin Transfer,LE
+ZLEX_CINDICATOR,LEX_EDD_0016 Cycle Counting Indicatr,LE
+ZLEX_CYCLE_COUNTING,Inventory Progress Report,LE
+ZLEX_FORM_PRINT,Transaction for Form Printing,LE
+ZLEX_FRT_COST_UPD,Update Freight Cost in OBD,LE
+ZLEX_GR_BY_HU,Goods Receipt by HU,LE
+ZLEX_INVENTORY,"LEX Inventory table MARD, MARC",LE
+ZLEX_LM03,Put Away - by TO,LE
+ZLEX_LM05,Picking by TO ID,LE
+ZLEX_LM07,Group Picking,LE
+ZLEX_LM50,Count Inventory By System Guided,LE
+ZLEX_LM51,Count Inventory By User Selection,LE
+ZLEX_LM58,Sys. guided dynamic inventory count,LE
+ZLEX_LM59,User initiated dynamic invent. count,LE
+ZLEX_LM60,User guided dynamic invent. count,LE
+ZLEX_MAT_WM_1,LEX_MAT_WM_1 LEX MaT Master WM View1,LE
+ZLEX_MAT_WM_2,LEX_MAT_WM_1 LEX MaT Master WM View2,LE
+ZLEX_MATERIAL,"LEX Material Master,Plant level-MARC",LE
+ZLEX_PARCEL_PGI,PGI of parcel deliveries,LE
+ZLEX_PCN_UPD,WM Posting Change Update,LE
+ZLEX_PHYS_INV,Transaction code for inventory,LE
+ZLEX_POD,T-CODE for table ZLEX_POD,LE
+ZLEX_QVAL_ACT,DG Q-Value Activation,LE
+ZLEX_RECEIVE_REPORT,LEX Receiving Report,LE
+ZLEX_RF_RECEIVING,SAPMZLEXR0248O_RF_RECEIVING,LE
+ZLEX_RF_REPRINT,Label reprinting for Receiving RF,LE
+ZLEX_SCRAP_REPORT, SLED Scrap List Report,LE
+ZLEX_SHIPMNT_PROXY,IDD0083: Shipment Interface Proxy,LE
+ZLEX_SPECMAT,Spec. Material Assignment Report,LE
+ZLEX_WMBIN_UPDATE,WM - Load Last Bin Count Date,LE
+ZLEX_WMRPT,WM Expected Delivery Report,LE
+ZMDG_DIVSTY_CLS,Minority type for Diversity Classifi,MDM
+ZMDM_CLSFN_CHRS,View for ZMDMV_CLSFN_CHRS,MDM
+ZMDM_CM_RPT_CC,Customer Master Report for Com. Code,MDM
+ZMDM_CM_RPT_COMM,Customer Master Report for Email Add,MDM
+ZMDM_CM_RPT_GEN,Customer Master Report for Gen. Data,MDM
+ZMDM_CM_RPT_PATN,Customer Master Rep. for Partner Fn.,MDM
+ZMDM_CM_RPT_SALE,Customer Master Rep. for Sales View,MDM
+ZMDM_COE_SCRN,MDM COE Approval,MDM
+ZMDM_CUST_BASIC_LIST,Display Customer Basic List,MDM
+ZMDM_CUST_MDM_WF,Custodian screen for MDM WF,MDM
+ZMDM_CUSTOMER_REL,Customer Relation Report,MDM
+ZMDM_DOWNLOAD_TABLES,Download SAP tables into .txt file,MDM
+ZMDM_IDOC_ANALYSIS,Idoc Analysis Report,MDM
+ZMDM_MAINT_CROSSTAB,Tcode to maintain ZMDM_LEGCY_CROSS,MDM
+ZMDM_MAT_BASIC_LIST,Report for Material Basic List,MDM
+ZMDM_MAT_MASTER,Display Table ZMDM_MAT_MASTER,MDM
+ZMDM_MAT_MSTR_WF,Screens for Material Master WF,MDM
+ZMDM_MM_RPT_ACCTG,Material Report - Acct & Finance,MDM
+ZMDM_MM_RPT_CLASS,Material Report - Class,MDM
+ZMDM_MM_RPT_PLANT,Material Report - Global & Plant,MDM
+ZMDM_MM_RPT_QM,Material Report - Plant & Quality,MDM
+ZMDM_MM_RPT_SALESORG,Material Report - Sales Org Data,MDM
+ZMDM_MM_RPT_WM,Material Report - WM Warehouse,MDM
+ZMDM_PRICELIST,Program to download Price List,MDM
+ZMDM_QUALITY,Table view for ZMDMV_QUALITY,MDM
+ZMDM_SHIP_SUB,Shipping storage condition report fo,MDM
+ZMDM_TAX_CLSFN,Table view for ZMDM_TAX_CLSFN,MDM
+ZMDM_VEND_SUN,Sunshine Vendors Report,MDM
+ZMDM_VM_RPT_GEN,Vendor Master Rep. for General View,MDM
+ZMDM_VM_RPT_PARTN,Vendor Master Report for Partner Fn,MDM
+ZMDM_WF_MAT_APPR,Tcode To Maintain MM Custodians,MDM
+ZMDM_WF_MAT_MASTER,Table Maintainance/View for MM WF,MDM
+ZOTC_AR_WRITEOFF,AR Write-off Process,MDM
+ZOTC_AUTO_POD_CONF,TCode to run report Auto_POD_Confirm,MDM
+ZOTC_BATCH_MATCHING,Batch Matching Report,SD
+ZOTC_BATCHMATCHING,Batch Matching Master Data,MDM
+ZOTC_BILLING,Query for VBRK and VBPA,SD
+ZOTC_BILLING_DETAIL,"Query for VBRP, LIKP and VBREVE",SD
+ZOTC_BILLING_REPORT,Billing Report,SD
+ZOTC_BILLPLAN,Billing plan exception report,SD
+ZOTC_CCENTER,Transaction to maintain  cost center,FI
+ZOTC_CERTIFY,Request for Certificate of Origin,SD
+ZOTC_CUSTSATXT,ZOTCR0026O - Customer Collect A/C,SD
+ZOTC_DEBIT_CREDIT,Debit Credit report,SD
+ZOTC_DEL_REP,ZOTC Outbound Delivery Report,SD
+ZOTC_FOC,FOC Report for VAT,FI
+ZOTC_LOAD_ENDCUST,Load data to EndCustomer_Assn Table,SD
+ZOTC_LOAD_TERRITASSN,Load data to Territory_Assn Table,SD
+ZOTC_MAINT_ENDCUSEXC,Maintain End Customer Exceptions,SD
+ZOTC_MAINT_ENDCUST,Maintain EndCust Assignment online,SD
+ZOTC_MAINT_SREPEXC,Maintain Sales Rep Exceptions,SD
+ZOTC_MAINT_TERRASSN,Maintain Territory Assignment online,SD
+ZOTC_POD_REPORT,TCode for Comprehensive POD Report,SD
+ZOTC_PRICE_COND,Pricing Condition,SD
+ZOTC_PRICE_OVERRIDE,Transaction Code for Price Override,SD
+ZOTC_PRICING_REPORT,Pricing Report for Mass Price Upload,SD
+ZOTC_REV_RECOG,Query for VBREVE,SD
+ZOTC_SET_IDOC_STATUS,Set Idoc Status,SD
+ZOTC_SN_DOC_DISPLAY,Seial number document display,SD
+ZOTC_V_NLN,Send transfer price via V_NLN,SD
+ZOTC_VFX3_REPORT,Tcode for ZOTC0142_VFX3_ACCURAL_REP,SD
+ZPLM_ADD_OBJECTS_ER,Add Objects to Engineering Record,PLM
+ZPLM_AMPL_DELETE,Mark Z007 Deletion,PLM
+ZPLM_AMPL_UPLOAD,Mass Load of AMPL,PLM
+ZPLM_CAPDMF_CHECK,Maintain CAP/DMF Checks,PLM
+ZPLM_CREATE_Z002,Create eBOM Component Material Z002,PLM
+ZPLM_CREATE_Z007,Create MPN Material (Z007),PLM
+ZPLM_CREATE_Z027,Z002 & Z007 Combo material creation,PLM
+ZPLM_DISPLAY_MR,Display Material Request,PLM
+ZPLM_DMRREPORT,Device Master Record Report,PLM
+ZPLM_DMS_RASIC,Maintain DMS RASIC table,PLM
+ZPLM_ECAD,PLM eCAD Integration Launchpad,PLM
+ZPLM_ECAD_EBOM_LOAD,Load eBOMs from eCAD,PLM
+ZPLM_ECM_MATRIX,Maintain ECM Matrix table,PLM
+ZPLM_LABEL_BATCH_DIS,PLM Material Batch Counter,PLM
+ZPLM_LABEL_COUNTER,PLM Label Batch Counter Management,PLM
+ZPLM_LABEL_PRINT,Bartender Label Printing,PLM
+ZPLM_LABEL_REPORT,India Lable Report,PLM
+ZPLM_MAT_SEARCH,Search for Bio-Rad part number,PLM
+ZPLM_MATERIAL_DISPOS,Material disposition,PLM
+ZPLM_MATL_SPEC,Material Specification Sheet,PLM
+ZPLM_MM_DASHBOARD,PLM MM: Dashboard,PLM
+ZPLM_MM_REQ_SET,PLM MM: Material request settings,PLM
+ZPLM_MM_TIER2_REQ,PLM MM: Tier2 Request,PLM
+ZPLM_MM_WHERE_USED,Where-used report to multi level BOM,PLM
+ZPLM_MPN_MAT_SEARCH,Search based on Manufacturer/MPN,PLM
+ZPLM_MPNREPORT,MPN Report,PLM
+ZPLM_ORIGIN_REPORT,Origin Report,PLM
+ZPLM_PLANNING_REPORT,Transaction code for Planning Report,PLM
+ZPLM_RD_WF_UTILITY,Spec WF Status and Agent Tracking,PLM
+ZPLM_RELEASE_Z002,Release eBOM Component Material Z002,PLM
+ZPLM_RND_PURC_REPORT,R&D NPD Purchasing Report,PLM
+ZPLM_RROLLUP,RoHS Rollup for Purchased and Manufa,PLM
+ZPLM_UPDATE_Z002,Update eBOM Component Material Z002,PLM
+ZPLM_UPDATE_Z007,Create MPN Material (Z007),PLM
+ZPLM_WF_UTILITY,WF Agent Tracking Utility,PLM
+ZPLM_WRKFLOW_DASHBRD,"eBOM,MPN Support Workflow Dashboard",PLM
+ZPTM_ALIGN_RECP,Discontinuation Management Report,PI
+ZPTM_ALLOCATION_RPT,QSD Allocation Extract,PI
+ZPTM_BATCH_QA,Batch Audit Look Up,PI
+ZPTM_BATCH_RFSCREEN,Batch Number to the Front RF Screen,PI
+ZPTM_BATCHCARD,Master Batch Card Report,PI
+ZPTM_BLK_CAL_TR,Maintain table  ZPTM_BLK_CAL_TR,PI
+ZPTM_BLK_PRD_MAS,Maintain table  ZPTM_BLK_PRD_MAS,PI
+ZPTM_BOM_REP,Bill of Materials Report,PI
+ZPTM_BOX_SCH,Box scheduling program,PI
+ZPTM_BULK_CALC,RBC - Bulk/Buffer Calculator,PI
+ZPTM_CCYCLE_REPORT,Control Cycle extract,PI
+ZPTM_CHANGE_BATCH,Change Batch Master,PP
+ZPTM_CREATE_BATCH,Create Batch Master,PP
+ZPTM_CSLED,Commercial Shelf Life Report,PI
+ZPTM_CSTBOM_REPORT,Costed Bom Report,PI
+ZPTM_DATE1,Batch Master Date 1 Report,PP
+ZPTM_DISPATCH,Production dispatch report,PI
+ZPTM_DOC_ARCH,Scanned but not linked documents,PI
+ZPTM_DOC_PRINT,Dynamic Document Printing,PI
+ZPTM_EX_BATCH_QSD,QSD Batch Extract Reports,PI
+ZPTM_EXTRACT_INSP,Extract Inspection Plan Report,PI
+ZPTM_EXTRACT_RCP,Tcode for Extract Recipe,PI
+ZPTM_FILL_TARGETCALC,Fill Target Calculator,PI
+ZPTM_FIRMPLORD_RPT,Firmed Planned Orders to Kinaxis,PI
+ZPTM_GENEALOGY,GENEALOGY Report,PI
+ZPTM_GI_RF,PTM_EDD_0063: GIPO RF device,PI
+ZPTM_GI_RF_SCRAP,Transaction for GI-Scraping Function,PI
+ZPTM_GI_TRAY,PTM_EDD_0367-RF GI of Empty ID Cards,PI
+ZPTM_GR_BARCODE,PTM_EDD_0064_Goods Receipt Barcode,PI
+ZPTM_INV_SHORTAGE,Inventory Shortage Report,PI
+ZPTM_IVDR_REPORT,IVDR Vendor List Report,PI
+ZPTM_LTP_LIST,Planned Orders from Long Term Planni,PI
+ZPTM_MATERIAL_MEMO,Transaction for Material Memo Report,PI
+ZPTM_MD07,Supply Chain Exception Monitor,PI
+ZPTM_MDATA_IMPACT,Master Data Changing Impact Report,PI
+ZPTM_MIC_REP,MIC Extract Report,PI
+ZPTM_MRP_CFG,MRP - Batch Expiry Date Planning,PI
+ZPTM_MRP_REPORT,T-code for MRP Report,PI
+ZPTM_OPEN_STO_LRD,Open LRD STO Report,PI
+ZPTM_OPEN_STR_RPT,Firmed Purchase and STR Report,PI
+ZPTM_OPENPO_RPT,Open PO & STO Report,PI
+ZPTM_OPENSO_RPT,Open SO Report,PI
+ZPTM_OPTR_QUAL,PTM Operator Qualification,PI
+ZPTM_PI_SHEETS,PTM PI Sheets Log,PI
+ZPTM_PI_SHEETS_LIST,Report on ZPTM_PI_SHEETS table,PI
+ZPTM_PLM_LOAD_VERIF,Verificatn Reprt for Loading of PLM,PI
+ZPTM_PO_PHASE_CONF,Process Order Phase Confirmation,PI
+ZPTM_PRCORD_EXTRACT,Work order/ QI Stock/ Reservation re,PI
+ZPTM_PREQ,Query to access the purchase req.,PI
+ZPTM_PRINT_PRO_ORDER,Print SAP Process Order Form,PI
+ZPTM_PROCORD_LBL,Sap Process Order Detail BPR label,PI
+ZPTM_PROJ_LOT,Projected Receipts for RI,PI
+ZPTM_QGA5,Inspection Details,PI
+ZPTM_REL_REP,Phase Relationship Extract Report,PI
+ZPTM_RPR,Global Replenishment Planning Report,PI
+ZPTM_SAMPLE_LABEL,Sample Label Form,PI
+ZPTM_SERNO_CUS,Equipment Customer Report,PI
+ZPTM_SHIPMENTS_RPT,SO shipment Report,PI
+ZPTM_SN_PO,Transaction code for ZPTM_SN-PO,PI
+ZPTM_STAGING_TO,Generate staging TO for Crate Part,PI
+ZPTM_STOCK_RPT,OnHand Inventory Extract for Kinaxis,PI
+ZPTM_STOSHIP_LRD,PO Shipment Report,PI
+ZPTM_TRAY_REPORT,Tray data,PI
+ZPTP_AP_AUTO_REPORT,AP Auto Reporting,MM
+ZPTP_COCOADDRS,Query for Company code address,MM
+ZPTP_COPY_CONF,Copy Vendor Confirmation in PO,MM
+ZPTP_DOWN_PAY,Bio-Rad Down Payment Tracking Report,MM
+ZPTP_INFORD,Convert Info Record,MM
+ZPTP_MAINTAIN_SL,Maintain Source List ,MM
+ZPTP_MATGRP_GLAC, Maintain ZPTP_MATGRP_GLAC,MM
+ZPTP_MRP_EXCEPTION,MRP EXCEPTION REPORT,MM
+ZPTP_PARK_INV,PTP - Parked Invoice Report,MM
+ZPTP_PIR_EXTRACT,Report to download PIR Data,MM
+ZPTP_PO_AUTO_CLOSE,Open PO Auto Closure,MM
+ZPTP_POCOCOADR,PO Company Code Address,MM
+ZPTP_POVSPR,Transaction to maintain PO Vs. PR,MM
+ZPTP_PR_AGENT,PR Agent table,MM
+ZPTP_PR_RL_ALERT,Maintain PR Alert Agent ,MM
+ZPTP_PR_WF_APPROVAL,PR Workflow Approval Report,MM
+ZPTP_PREPAID_FRMEWRK,Prepaid Framewrk Order_AP_Automation,MM
+ZPTP_REMADV_PARM, ZPTP_REMADV_PARM,MM
+ZPTP_RS_ACCRUAL_REP,Bio-Rad PDAP/ICS Accrual Report,MM
+ZPTP_SL_EXTRACT,Source List Extract Report,MM
+ZPTP_STO_REPRICING,STO Repricing,MM
+ZPTP_TPRICE,PTP_IDD_0077 Transfer Price,MM
+ZPTP_UPDINFO,Update inforecord ME12,MM
+ZPTP_UPDPIR,Update PIR Condition records,MM
+ZRTR_CK84,Cost Itemization for Multi Materials,CO
+ZRTR_DEFREV_2,Deferred Revenue Report,FI
+ZRTR_DEFREV_OPT,Deffered Revenue Report (Optimized),FI
+ZRTR_EXP_STOCK,Obsolete batch managed matl qty rep,CO
+ZRTR_FIXED_ASSET,Transaction for Fixed Asset,FI
+ZRTR_INVENTORY,Inventory Movement,FI
+ZRTR_JUR_CODE_IMPCT,Jurisdiction Code Impact on Rezoning,FI
+ZRTR_MATERIAL_MASTER,Material master validation RTR team,CO
+ZRTR_ML_PRICES,Materials with missing Group costs,FI
+ZRTR_ORD_COSTS,Orders Cost Analysis Report,CO
+ZRTR_RFUTAX00_RPT,Trsaction code for the ZRTRN0020_RPT,FI
+ZRTR_SMPLS,Samples Sales Report,FI
+ZRTR_TAX_AUDIT_RPT,Sales_Tax_Audit_Report,FI
+ZRTR0118_GL_DETAILS,G/L Account Line Item Detail Display,FI
+ZVLPODL, ZLEXR0545O_WSPODLIST1,LE
