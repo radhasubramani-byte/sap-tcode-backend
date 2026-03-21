@@ -14,7 +14,7 @@ BMC3,Display Class (Class Type 'BATCH'),PP
 BP,Maintain Business Partner,FI
 BPCD,Business Partner: Change Documents,FI
 C203,Display Master Recipe,PP
-C223_D,Display Production Version,PP
+C223_Display Production Version,PP
 C261,Change Document Display Master Rec.,PP
 CA81,Master recipe usage and resources,PP
 CC03,Display Change Master,PP
@@ -626,7 +626,7 @@ MI21,Print physical inventory document,MM
 MI22,Display Phys. Inv. Docs. f. Material,MM
 MI24,Physical Inventory List,MM
 MICN,Btch Inpt:Ph.Inv.Docs.for Cycle Ctng,MM
-MIGO,Goods Movement,LE
+MIGO,Post goods receipt,LE
 MIGO_GI,Goods Movement,MM
 MIGO_GO,Goods Movement,LE
 MIGO_GR,Goods Movement,MM

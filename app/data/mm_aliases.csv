@@ -9,8 +9,6 @@ alias,tcode,canonical_desc
 "display po",ME23N,"Display Purchase Order"
 "view po",ME23N,"Display Purchase Order"
 "check po",ME23N,"Display Purchase Order"
-"create pr",ME51N,"Create Purchase Requisition"
-"raise pr",ME51N,"Create Purchase Requisition"
 "purchase requisition",ME51N,"Create Purchase Requisition"
 "create purchase requisition",ME51N,"Create Purchase Requisition"
 "make purchase requisition",ME51N,"Create Purchase Requisition"

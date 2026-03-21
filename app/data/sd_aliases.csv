@@ -9,6 +9,7 @@ alias,tcode,canonical_desc
 "display sales order",VA03,"Display Sales Order"
 "view sales order",VA03,"Display Sales Order"
 "check sales order",VA03,"Display Sales Order"
+"lookup sales order",VA03,"Display Sales Order"
 "create delivery",VL01N,"Create Outbound Delivery"
 "outbound delivery",VL01N,"Create Outbound Delivery"
 "make delivery",VL01N,"Create Outbound Delivery"
