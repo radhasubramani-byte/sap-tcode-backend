@@ -1,9 +1,19 @@
 !requirements.txt
 !tcodes.csv
-*.xlsx.env 
-".env" 
-data/
-*.npy
+
+*.xlsx
+.env
+".env"
+
+# Ignore everything inside data folder
+data/*
+
+# BUT allow CSV files (your knowledge base + aliases)
+!data/*.csv
+
+# Still ignore embeddings
+data/*.npy
+
 __pycache__/
 *.pyc
 *.pyo
