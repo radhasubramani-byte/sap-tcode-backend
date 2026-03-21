@@ -23,6 +23,7 @@ alias,tcode,canonical_desc
 "customer invoice",VF01,"Create Billing Document"
 "change billing",VF02,"Change Billing Document"
 "display billing",VF03,"Display Billing Document"
+"display customer invoice",VF03,"Display Billing Document"
 "customer master",VD01,"Create Customer"
 "create customer",VD01,"Create Customer"
 "change customer",VD02,"Change Customer"
