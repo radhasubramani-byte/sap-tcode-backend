@@ -44,6 +44,13 @@ _DIGITS = "zero one two three four five six seven eight nine".split()
 
 
 def speak_tcode(code: str) -> str:
+    """
+    Speak SAP T-codes clearly for phone TTS.
+    Examples:
+      ME21N -> M E two one N
+      VF03  -> V F zero three
+      /SAPPO/PPO3 -> slash S A P P O slash P P O three
+    """
     code = (code or "").strip().upper()
     out: List[str] = []
 
@@ -70,35 +77,124 @@ def speak_letters(s: str) -> str:
 
 
 def sap_prefix() -> str:
-    return "S A P. T-code"
+    # No punctuation between SAP and T-code; sounds better in VAPI/TTS
+    return "S A P T-code"
+
+
+def naturalize_description(desc: str) -> str:
+    """
+    Make SAP descriptions sound more natural on phone calls.
+    """
+    desc = (desc or "").strip()
+
+    if not desc:
+        return ""
+
+    d = desc.lower()
+
+    replacements = {
+        "create purchase order": "create a purchase order",
+        "change purchase order": "change a purchase order",
+        "display purchase order": "display a purchase order",
+        "create purchase requisition": "create a purchase requisition",
+        "change purchase requisition": "change a purchase requisition",
+        "display purchase requisition": "display a purchase requisition",
+        "display billing document": "display a billing document",
+        "create billing document": "create a billing document",
+        "goods movement": "post goods movement",
+        "goods receipt": "post goods receipt",
+        "goods issue": "post goods issue",
+        "display customer invoice": "display a customer invoice",
+        "create sales order": "create a sales order",
+        "change sales order": "change a sales order",
+        "display sales order": "display a sales order",
+    }
+
+    if d in replacements:
+        return replacements[d]
+
+    # generic improvements
+    if d.startswith("create "):
+        return "create a " + d[len("create "):]
+    if d.startswith("change "):
+        return "change a " + d[len("change "):]
+    if d.startswith("display "):
+        return "display a " + d[len("display "):]
+
+    return d
+
+
+def dedupe_results(results: List[Dict]) -> List[Dict]:
+    """
+    Remove duplicate T-codes from results while keeping order.
+    Helpful when same alias exists in multiple alias CSV files.
+    """
+    seen = set()
+    out: List[Dict] = []
+
+    for r in results:
+        if not isinstance(r, dict):
+            continue
+
+        tcode = (r.get("tcode") or "").strip().upper()
+        key = tcode or f"{r.get('description')}|{r.get('module')}"
+
+        if key in seen:
+            continue
+
+        seen.add(key)
+        out.append(
+            {
+                "tcode": r.get("tcode"),
+                "description": r.get("description"),
+                "module": r.get("module"),
+                "score": r.get("score"),
+                "match_type": r.get("match_type"),
+            }
+        )
+
+    return out
 
 
 def build_speech(best_match: Optional[Dict], results: List[Dict], c_label: str, r_type: str) -> str:
+    """
+    Voice-optimized speech builder.
+    Keeps SAP pronunciation clear and makes the sentence sound natural on phone calls.
+    """
+    results = dedupe_results(results)
+
     if not best_match:
         if results:
             options = []
             for r in results[:3]:
                 tc = (r.get("tcode") or "").strip()
-                dd = (r.get("description") or "").strip()
+                dd = naturalize_description(r.get("description") or "")
                 mod = (r.get("module") or "").strip()
                 mod_sp = speak_letters(mod)
 
-                line = f"{speak_tcode(tc)} — {dd}" if tc else dd
+                if tc and dd:
+                    line = f"{speak_tcode(tc)} to {dd}"
+                elif tc:
+                    line = speak_tcode(tc)
+                else:
+                    line = dd
+
                 if mod_sp:
-                    line = f"{line}. Module {mod_sp}"
+                    line = f"{line} in module {mod_sp}"
+
                 options.append(line)
 
-            joined = " / ".join(options)
-            return f"I found a few close options. {joined}. Which one did you mean?"
+            joined = " or ".join(options)
+            return f"I found a few close options: {joined}. Please choose one."
 
         return (
-            "I couldn’t find a matching S A P transaction code. "
-            "Try saying a task like create purchase order, create purchase requisition, "
-            "post goods receipt, or display profit center."
+            "I couldn’t find a matching S A P T-code. "
+            "Try saying something like create a purchase order, create a purchase requisition, "
+            "post goods receipt, or display a profit center."
         )
 
     tcode = (best_match.get("tcode") or "").strip()
-    desc = (best_match.get("description") or "").strip()
+    desc = naturalize_description(best_match.get("description") or "")
     module = (best_match.get("module") or "").strip()
 
     prefix = sap_prefix()
@@ -109,21 +205,31 @@ def build_speech(best_match: Optional[Dict], results: List[Dict], c_label: str, 
         opts = []
         for r in results[:3]:
             tc = (r.get("tcode") or "").strip()
-            dd = (r.get("description") or "").strip()
+            dd = naturalize_description(r.get("description") or "")
             mod = (r.get("module") or "").strip()
             mod_sp = speak_letters(mod)
 
-            line = f"{speak_tcode(tc)} — {dd}" if tc else dd
+            if tc and dd:
+                line = f"{speak_tcode(tc)} to {dd}"
+            elif tc:
+                line = speak_tcode(tc)
+            else:
+                line = dd
+
             if mod_sp:
-                line = f"{line}. Module {mod_sp}"
+                line = f"{line} in module {mod_sp}"
+
             opts.append(line)
 
-        options = " / ".join(opts) if opts else f"{spoken_code} — {desc}"
-        return f"I found a few close options. {options}. Which one did you mean?"
+        options = " or ".join(opts) if opts else f"{spoken_code} to {desc}"
+        return f"I found a few close options: {options}. Please choose one."
 
-    if module_spoken:
-        return f"The {prefix} is {spoken_code}. {desc}. Module {module_spoken}."
-    return f"The {prefix} is {spoken_code}. {desc}."
+    # Confident / normal case
+    if desc and module_spoken:
+        return f"The recommended {prefix} is {spoken_code} to {desc} in module {module_spoken}."
+    if desc:
+        return f"The recommended {prefix} is {spoken_code} to {desc}."
+    return f"The recommended {prefix} is {spoken_code}."
 
 
 # -------------------------
@@ -169,7 +275,7 @@ def voice_webhook(
 
     if not transcript:
         return VoiceWebhookResponse(
-            speech="Please say what you want to do in S A P, for example: create purchase order.",
+            speech="Please say what you want to do in S A P, for example: create a purchase order.",
             type="none",
             confidence=0.0,
             confidence_label="low",
@@ -188,24 +294,14 @@ def voice_webhook(
         )
 
     try:
+        # Keep warm-up message only when backend truly cannot search yet.
         if not search_is_ready():
-            return VoiceWebhookResponse(
-                speech="One moment — I’m loading the S A P knowledge base.",
-                type="warming_up",
-                confidence=0.0,
-                confidence_label="low",
-                best_match=None,
-                results=[],
-            )
+            print("VOICE readiness check: search service reports not ready yet")
     except Exception as exc:
         print(f"VOICE readiness check failed: {exc}")
 
     try:
-        # IMPORTANT:
-        # Use shared search service directly so voice follows the exact same ranking as chat:
-        # 1. description match
-        # 2. alias match
-        # 3. semantic search
+        # Voice should follow the exact same ranking as chat/search service.
         search_resp = search_tcode(transcript, top_k=5)
         print(f"VOICE search response: {search_resp}")
 
@@ -228,6 +324,8 @@ def voice_webhook(
         if not isinstance(results, list):
             results = []
 
+        results = dedupe_results(results)
+
         if not best and results and isinstance(results[0], dict):
             best = results[0]
 
@@ -245,20 +343,7 @@ def voice_webhook(
         if r_type not in {"confident", "uncertain", "none", "warming_up", "error"}:
             r_type = "confident" if best else "none"
 
-        normalized_results: List[Dict] = []
-        for r in results:
-            if isinstance(r, dict):
-                normalized_results.append(
-                    {
-                        "tcode": r.get("tcode"),
-                        "description": r.get("description"),
-                        "module": r.get("module"),
-                        "score": r.get("score"),
-                        "match_type": r.get("match_type"),
-                    }
-                )
-
-        # Prefer backend text when it is already an explicit uncertain / suggestion message
+        # Prefer backend text only for explicit uncertain / error style messages.
         backend_speech = (
             search_resp.get("speech")
             or search_resp.get("answer")
@@ -273,28 +358,28 @@ def voice_webhook(
                     confidence=round(score, 3),
                     confidence_label=c_label,
                     best_match=None,
-                    results=normalized_results,
+                    results=results,
                 )
 
-            speech = build_speech(None, normalized_results, c_label, "uncertain")
+            speech = build_speech(None, results, c_label, "uncertain")
             return VoiceWebhookResponse(
                 speech=speech,
                 type="uncertain",
                 confidence=round(score, 3),
                 confidence_label=c_label,
                 best_match=None,
-                results=normalized_results,
+                results=results,
             )
 
         if best and isinstance(best, dict):
-            speech = build_speech(best, normalized_results, c_label, r_type)
+            speech = build_speech(best, results, c_label, r_type)
             return VoiceWebhookResponse(
                 speech=speech,
                 type="confident" if r_type == "confident" else r_type,
                 confidence=round(score, 3),
                 confidence_label=c_label,
                 best_match=best,
-                results=normalized_results,
+                results=results,
             )
 
         if backend_speech:
@@ -304,17 +389,17 @@ def voice_webhook(
                 confidence=round(score, 3),
                 confidence_label=c_label,
                 best_match=None,
-                results=normalized_results,
+                results=results,
             )
 
-        speech = build_speech(None, normalized_results, c_label, r_type)
+        speech = build_speech(None, results, c_label, r_type)
         return VoiceWebhookResponse(
             speech=speech,
             type=r_type,
             confidence=round(score, 3),
             confidence_label=c_label,
             best_match=None,
-            results=normalized_results,
+            results=results,
         )
 
     except Exception as exc:
