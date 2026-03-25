@@ -1,10 +1,13 @@
 """
+search_service.py
+
 Production-safe semantic search service for SAP T-codes.
 
-Search priority:
-1. Exact / lexical description match from metadata
-2. Alias match
-3. Semantic search fallback
+Corrected search priority:
+1. Alias exact match
+2. Alias all-words match
+3. Exact / lexical description match from metadata
+4. Semantic search fallback
 
 Exposes:
 - initialize_search()  -> lazy initialization (call on startup in background)
@@ -55,6 +58,11 @@ else:
     _DATA_DIR = "data"
     _EMBED_PATH = "data/embeddings.npy"
 
+STOP_WORDS = {
+    "the", "a", "an", "for", "to", "in", "of", "on", "by", "with",
+    "and", "or", "is", "are", "be", "do", "does", "did", "from"
+}
+
 
 # -------------------------
 # Utilities
@@ -92,9 +100,14 @@ def _normalize_text_for_match(s: str) -> str:
     if s is None:
         return ""
     s = s.lower()
-    s = re.sub(r"[^a-z0-9\s]", " ", s)
+    s = re.sub(r"[^a-z0-9/\s]", " ", s)
     s = re.sub(r"\s+", " ", s).strip()
     return s
+
+
+def _tokenize_meaningful(s: str) -> List[str]:
+    tokens = _normalize_text_for_match(s).split()
+    return [t for t in tokens if t and t not in STOP_WORDS]
 
 
 # -------------------------
@@ -104,7 +117,7 @@ def _normalize_desc_text(s: str) -> str:
     if not s:
         return ""
     s = s.lower().strip()
-    s = re.sub(r"[^a-z0-9\s]", " ", s)
+    s = re.sub(r"[^a-z0-9/\s]", " ", s)
     s = re.sub(r"\s+", " ", s).strip()
     return s
 
@@ -218,8 +231,16 @@ def load_alias_patterns() -> None:
 
     for fpath in files:
         fname = os.path.basename(fpath)
+        default_module = ""
+        if fname.lower().startswith("mm_"):
+            default_module = "MM"
+        elif fname.lower().startswith("sd_"):
+            default_module = "SD"
+        elif fname.lower().startswith("le_"):
+            default_module = "LE"
+
         try:
-            with open(fpath, newline="", encoding="utf-8") as fh:
+            with open(fpath, newline="", encoding="utf-8-sig") as fh:
                 reader = csv.reader(fh)
                 rows = list(reader)
                 start_idx = 0
@@ -236,15 +257,20 @@ def load_alias_patterns() -> None:
                     tcode = row[1].strip() if len(row) > 1 else ""
                     canonical = row[2].strip() if len(row) > 2 else ""
 
-                    if not alias:
+                    if not alias or not tcode:
                         continue
+
+                    alias_norm = _normalize_text_for_match(alias)
+                    alias_tokens = _tokenize_meaningful(alias)
 
                     _alias_patterns.append(
                         {
-                            "alias": _normalize_text_for_match(alias),
+                            "alias": alias_norm,
+                            "alias_tokens": alias_tokens,
                             "raw_alias": alias,
-                            "tcode": tcode,
+                            "tcode": tcode.upper(),
                             "canonical_desc": canonical,
+                            "module": default_module,
                             "source": fname,
                         }
                     )
@@ -260,7 +286,7 @@ def load_alias_patterns() -> None:
         print("No alias files found")
 
 
-def _find_alias_matches(query: str) -> List[Dict]:
+def _find_alias_exact_match(query: str) -> List[Dict]:
     if not query or not _alias_patterns:
         return []
 
@@ -269,47 +295,77 @@ def _find_alias_matches(query: str) -> List[Dict]:
 
     for entry in _alias_patterns:
         alias = entry.get("alias", "")
-        if not alias:
-            continue
-
         if q == alias:
             matches.append(
                 {
                     "tcode": entry.get("tcode"),
                     "description": entry.get("canonical_desc") or entry.get("raw_alias"),
+                    "module": entry.get("module"),
                     "matched_alias": entry.get("raw_alias"),
                     "source": entry.get("source"),
                     "score": 1.0,
-                }
-            )
-            continue
-
-        pattern = r"\b" + re.escape(alias) + r"\b"
-        if re.search(pattern, q):
-            matches.append(
-                {
-                    "tcode": entry.get("tcode"),
-                    "description": entry.get("canonical_desc") or entry.get("raw_alias"),
-                    "matched_alias": entry.get("raw_alias"),
-                    "source": entry.get("source"),
-                    "score": 0.95,
-                }
-            )
-            continue
-
-        if alias in q:
-            matches.append(
-                {
-                    "tcode": entry.get("tcode"),
-                    "description": entry.get("canonical_desc") or entry.get("raw_alias"),
-                    "matched_alias": entry.get("raw_alias"),
-                    "source": entry.get("source"),
-                    "score": 0.8,
+                    "match_type": "alias_exact",
                 }
             )
 
     matches.sort(key=lambda x: x.get("score", 0.0), reverse=True)
     return matches
+
+
+def _find_alias_all_words_match(query: str) -> List[Dict]:
+    """
+    Match alias rows where all meaningful query words are present in the alias.
+    Example:
+    query: "post goods receipt"
+    alias: "post goods receipt" -> match
+    alias: "goods receipt" -> no match because "post" is missing
+    """
+    if not query or not _alias_patterns:
+        return []
+
+    q_words = _tokenize_meaningful(query)
+    if not q_words:
+        return []
+
+    q_set = set(q_words)
+    matches: List[Dict] = []
+
+    for entry in _alias_patterns:
+        alias_words = set(entry.get("alias_tokens", []))
+        if not alias_words:
+            continue
+
+        if all(word in alias_words for word in q_set):
+            extra_words_penalty = len(alias_words) - len(q_set)
+            score = 0.98 if extra_words_penalty == 0 else max(0.90, 0.98 - (0.01 * extra_words_penalty))
+            matches.append(
+                {
+                    "tcode": entry.get("tcode"),
+                    "description": entry.get("canonical_desc") or entry.get("raw_alias"),
+                    "module": entry.get("module"),
+                    "matched_alias": entry.get("raw_alias"),
+                    "source": entry.get("source"),
+                    "score": round(score, 6),
+                    "match_type": "alias_all_words",
+                    "_extra_words_penalty": extra_words_penalty,
+                }
+            )
+
+    matches.sort(
+        key=lambda x: (
+            -x.get("score", 0.0),
+            x.get("_extra_words_penalty", 999),
+            x.get("tcode") or "",
+        )
+    )
+
+    cleaned = []
+    for m in matches:
+        item = dict(m)
+        item.pop("_extra_words_penalty", None)
+        cleaned.append(item)
+
+    return cleaned
 
 
 # -------------------------
@@ -392,15 +448,20 @@ def initialize_search() -> None:
             _safe_save_embeddings(emb_arr)
             print(f"Saved embeddings cache to {_EMBED_PATH}")
 
-        if _index is None or not isinstance(_index, np.ndarray) or len(_index) == 0:
-            print("No embeddings available. Search not ready.")
-            _ready = False
-        else:
+        # Ready should reflect whether metadata is available for alias + lexical search,
+        # not only whether semantic embeddings exist.
+        if _metadata:
             _ready = True
-            print(
-                f"Semantic search initialized: rows={len(_metadata)}, "
-                f"dim={_index.shape[1] if _index is not None else 'NA'}"
-            )
+            if isinstance(_index, np.ndarray) and len(_index) > 0:
+                print(
+                    f"Semantic search initialized: rows={len(_metadata)}, "
+                    f"dim={_index.shape[1] if _index is not None else 'NA'}"
+                )
+            else:
+                print(f"Lexical/alias search initialized without embeddings: rows={len(_metadata)}")
+        else:
+            print("No metadata available. Search not ready.")
+            _ready = False
 
     except Exception as exc:
         print(f"Failed to initialize search: {exc}")
@@ -498,32 +559,54 @@ def search_tcode(query: str, top_k: int = 5) -> Dict:
     if not query or not query.strip():
         return {"status": "invalid_query", "message": "Query cannot be empty"}
 
-    # 1) Description match FIRST
-    description_matches = _find_description_matches(query, top_k=top_k)
-    if description_matches:
-        return build_response_with_confidence(description_matches)
+    query = query.strip()
 
-    # 2) Alias match SECOND
-    alias_matches = _find_alias_matches(query)
-    if alias_matches:
+    # 1) Alias exact match FIRST
+    alias_exact_matches = _find_alias_exact_match(query)
+    if alias_exact_matches:
         results = []
-        for m in alias_matches[:top_k]:
+        for m in alias_exact_matches[:top_k]:
             tcode = (m.get("tcode") or "").upper() if m.get("tcode") else None
             meta = _tcode_index_map.get(tcode, {}) if tcode else {}
             desc = meta.get("description") or m.get("description")
-            module = meta.get("module") or meta.get("module_name") or None
+            module = meta.get("module") or meta.get("module_name") or m.get("module") or None
             results.append(
                 {
                     "tcode": tcode,
                     "description": desc,
                     "module": module,
-                    "score": round(float(m.get("score", 0.9)), 6),
-                    "match_type": "alias",
+                    "score": round(float(m.get("score", 1.0)), 6),
+                    "match_type": "alias_exact",
                 }
             )
         return build_response_with_confidence(results)
 
-    # 3) Semantic fallback
+    # 2) Alias all-meaningful-words match SECOND
+    alias_all_words_matches = _find_alias_all_words_match(query)
+    if alias_all_words_matches:
+        results = []
+        for m in alias_all_words_matches[:top_k]:
+            tcode = (m.get("tcode") or "").upper() if m.get("tcode") else None
+            meta = _tcode_index_map.get(tcode, {}) if tcode else {}
+            desc = meta.get("description") or m.get("description")
+            module = meta.get("module") or meta.get("module_name") or m.get("module") or None
+            results.append(
+                {
+                    "tcode": tcode,
+                    "description": desc,
+                    "module": module,
+                    "score": round(float(m.get("score", 0.98)), 6),
+                    "match_type": "alias_all_words",
+                }
+            )
+        return build_response_with_confidence(results)
+
+    # 3) Description match THIRD
+    description_matches = _find_description_matches(query, top_k=top_k)
+    if description_matches:
+        return build_response_with_confidence(description_matches)
+
+    # 4) Semantic fallback
     if not _ready or _index is None:
         return {
             "status": "warming_up",
